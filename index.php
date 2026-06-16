@@ -37,13 +37,13 @@ if ($current_stream_id) {
     $stream_query = "SELECT s.*, u.username as creator_username FROM streams s JOIN users u ON s.created_by = u.id WHERE s.id = ?";
     $stmt = db_prepare($conn, $stream_query);
     db_execute($stmt, [$current_stream_id]);
-    
+
     if ($conn instanceof SQLite3) {
         $stream_result = $stmt;
     } else {
         $stream_result = $stmt->get_result();
     }
-    
+
     if (db_num_rows($stream_result) > 0) {
         $current_stream = db_fetch_assoc($stream_result);
     }
@@ -52,26 +52,24 @@ if ($current_stream_id) {
 // Overlay live data from the ESPN-backed fetcher on top of the curated baseline.
 // Any section the live API can't provide keeps its curated value, so the page
 // always renders real content.
+$useLiveAPI = false;
+$fighter_a_detail = null; // headliner / "Tale of the Tape" left
+$fighter_b_detail = null; // "Tale of the Tape" right
 if (file_exists('api/ufc_data_fetcher.php')) {
     try {
         require_once 'api/ufc_data_fetcher.php';
         $fetcher = new UFCDataFetcher();
 
-        $liveEvents = $fetcher->getUpcomingEvents(5);
+        $liveEvents = $fetcher->getUpcomingEvents(6);
         if (!empty($liveEvents)) {
             $ufc_events = $liveEvents;
+            $useLiveAPI = true;
 
-            // Build the "Featured Fights" cards from the live events.
-            $featured_fights = [];
-            foreach (array_slice($liveEvents, 0, 4) as $event) {
-                $featured_fights[] = [
-                    'name' => $event['event_name'] ?? 'UFC Event',
-                    'fighters' => isset($event['main_event'])
-                        ? $event['main_event']['fighter_a'] . ' vs ' . $event['main_event']['fighter_b']
-                        : 'Main Event',
-                    'status' => (($event['status'] ?? '') === 'live') ? 'LIVE NOW' : 'UPCOMING',
-                    'date' => isset($event['event_date']) ? date('F j, Y', strtotime($event['event_date'])) : 'TBD',
-                ];
+            // Pull full bios for the main-event fighters (featured card + tape).
+            $mainBout = $liveEvents[0]['main_event'] ?? null;
+            if ($mainBout) {
+                $fighter_a_detail = $fetcher->getAthlete($mainBout['id_a'] ?? null);
+                $fighter_b_detail = $fetcher->getAthlete($mainBout['id_b'] ?? null);
             }
         }
 
@@ -90,6 +88,20 @@ if (file_exists('api/ufc_data_fetcher.php')) {
         error_log("UFC live data unavailable, using curated config: " . $e->getMessage());
     }
 }
+
+// Convenience handles for the templates below.
+$primary_event = $ufc_events[0] ?? null;
+$main_bout = $primary_event['main_event'] ?? null;
+$silhouette = 'https://a.espncdn.com/combiner/i?img=/i/headshots/nophoto.png&w=350&h=254';
+
+function last_name($full) {
+    $parts = preg_split('/\s+/', trim((string)$full));
+    $last = end($parts);
+    return $last !== false ? $last : $full;
+}
+function tape_val($v) {
+    return ($v === '' || $v === null) ? '—' : $v;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -99,1187 +111,558 @@ if (file_exists('api/ufc_data_fetcher.php')) {
     <title>ufc.solutions - FREE UFC STREAMS</title>
     <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --red: #d20a0a;
+            --bg: #0b0b0d;
+            --panel: #131316;
+            --panel-2: #1a1a1f;
+            --line: #2a2a30;
+            --muted: #9a9aa2;
         }
         body {
             font-family: 'Roboto', sans-serif;
-            background: #0d0d0d;
-            color: #ffffff;
+            background: var(--bg);
+            color: #fff;
             min-height: 100vh;
         }
+        a { color: inherit; text-decoration: none; }
+        img { display: block; }
+        .oswald { font-family: 'Oswald', sans-serif; }
+
+        /* Top announcement */
         .top-bar {
             background: linear-gradient(90deg, #d20a0a 0%, #8b0000 50%, #d20a0a 100%);
-            padding: 10px 0;
-            text-align: center;
-            font-size: 13px;
-            font-weight: 600;
-            letter-spacing: 1px;
-            animation: shimmer 3s infinite;
+            padding: 8px 0; text-align: center; font-size: 12px;
+            font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
         }
-        @keyframes shimmer {
-            0%, 100% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-        }
+
+        /* Navbar */
         .navbar {
-            background: #1a1a1a;
-            padding: 0 30px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            height: 70px;
-            border-bottom: 2px solid #d20a0a;
+            background: #000; height: 64px; display: flex; align-items: center;
+            justify-content: space-between; padding: 0 28px;
+            border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 50;
         }
-        .logo {
-            font-family: 'Oswald', sans-serif;
-            font-size: 36px;
-            font-weight: 700;
-            color: #ffffff;
-            letter-spacing: 2px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-            cursor: pointer;
-            transition: transform 0.3s;
-        }
-        .logo:hover {
-            transform: scale(1.05);
-        }
-        .logo span {
-            color: #d20a0a;
-        }
-        .nav-links {
-            display: flex;
-            gap: 30px;
-            align-items: center;
-        }
-        .nav-links a {
-            color: #ffffff;
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 14px;
-            letter-spacing: 1px;
-            transition: color 0.3s;
-            text-transform: uppercase;
-            cursor: pointer;
-        }
-        .nav-links a:hover {
-            color: #d20a0a;
-        }
-        .live-btn {
-            background: linear-gradient(135deg, #d20a0a 0%, #8b0000 100%);
-            color: white;
-            padding: 10px 25px;
-            border-radius: 4px;
-            font-weight: 700;
-            text-transform: uppercase;
-            font-size: 12px;
-            letter-spacing: 1px;
-            box-shadow: 0 4px 15px rgba(210,10,10,0.4);
-            animation: pulse-btn 2s infinite;
-        }
-        .live-btn:hover {
-            background: linear-gradient(135deg, #b30808 0%, #6b0000 100%);
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(210,10,10,0.6);
-        }
-        @keyframes pulse-btn {
-            0%, 100% { box-shadow: 0 4px 15px rgba(210,10,10,0.4); }
-            50% { box-shadow: 0 4px 25px rgba(210,10,10,0.8); }
-        }
-        .hero-section {
-            background: linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%);
-            padding: 60px 30px;
-            position: relative;
-            overflow: hidden;
-            min-height: 700px;
-        }
-        .hero-section::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%23d20a0a" fill-opacity="0.03" width="100" height="100"/></svg>');
-            pointer-events: none;
-        }
-        .hero-section::after {
-            content: '';
-            position: absolute;
-            top: -50%;
-            right: -50%;
-            width: 100%;
-            height: 100%;
-            background: radial-gradient(circle, rgba(210,10,10,0.1) 0%, transparent 70%);
-            pointer-events: none;
-        }
-        .hero-content {
-            max-width: 1400px;
-            margin: 0 auto;
-            display: grid;
-            grid-template-columns: 2fr 1fr;
-            gap: 40px;
-            position: relative;
-            z-index: 1;
-        }
-        .main-fight {
-            background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 15px 50px rgba(0,0,0,0.6);
-            border: 1px solid #333;
-        }
-        .fight-banner {
-            background: linear-gradient(135deg, #d20a0a 0%, #8b0000 100%);
-            padding: 40px 30px;
-            text-align: center;
-            position: relative;
-            overflow: hidden;
-        }
-        .fight-banner::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
-            animation: rotate 20s linear infinite;
-        }
-        @keyframes rotate {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-        .fight-banner h2 {
-            font-family: 'Oswald', sans-serif;
-            font-size: 56px;
-            font-weight: 700;
-            letter-spacing: 3px;
-            margin-bottom: 10px;
-            position: relative;
-            z-index: 1;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
-        .fight-banner .subtitle {
-            font-size: 20px;
-            font-weight: 500;
-            letter-spacing: 2px;
-            opacity: 0.95;
-            position: relative;
-            z-index: 1;
-        }
-        .fighters {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 40px;
-            padding: 40px;
-        }
-        .fighter {
-            text-align: center;
-        }
-        .fighter-image {
-            width: 180px;
-            height: 180px;
-            background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
-            border-radius: 50%;
-            margin: 0 auto 15px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 70px;
-            border: 4px solid #d20a0a;
-            box-shadow: 0 0 30px rgba(210,10,10,0.3);
-            position: relative;
-            overflow: hidden;
-        }
-        .fighter-image::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
-            transform: rotate(45deg);
-        }
-        .fighter-name {
-            font-family: 'Oswald', sans-serif;
-            font-size: 24px;
-            font-weight: 600;
-            letter-spacing: 1px;
-        }
-        .vs {
-            font-family: 'Oswald', sans-serif;
-            font-size: 36px;
-            font-weight: 700;
-            color: #d20a0a;
-        }
-        .fight-actions {
-            padding: 30px;
-            text-align: center;
-            background: #1a1a1a;
-        }
+        .logo { font-family: 'Oswald', sans-serif; font-size: 30px; font-weight: 700; letter-spacing: 1px; cursor: pointer; }
+        .logo span { color: var(--red); }
+        .nav-links { display: flex; gap: 26px; align-items: center; }
+        .nav-links a { font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 15px; letter-spacing: .5px; text-transform: uppercase; color: #e8e8ea; transition: color .2s; }
+        .nav-links a:hover { color: var(--red); }
+        .nav-right { display: flex; align-items: center; gap: 14px; }
+        .nav-right .icon-btn { background: none; border: none; color: #fff; font-size: 18px; cursor: pointer; }
         .btn {
-            display: inline-block;
-            padding: 18px 45px;
-            margin: 0 10px;
-            font-family: 'Oswald', sans-serif;
-            font-size: 16px;
-            font-weight: 600;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: all 0.3s;
-            position: relative;
-            overflow: hidden;
-        }
-        .btn::before {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 0;
-            height: 0;
-            border-radius: 50%;
-            background: rgba(255,255,255,0.2);
-            transform: translate(-50%, -50%);
-            transition: width 0.6s, height 0.6s;
-        }
-        .btn:hover::before {
-            width: 300px;
-            height: 300px;
-        }
-        .btn-primary {
-            background: linear-gradient(135deg, #d20a0a 0%, #8b0000 100%);
-            color: white;
-            box-shadow: 0 4px 15px rgba(210,10,10,0.4);
-        }
-        .btn-primary:hover {
-            background: linear-gradient(135deg, #b30808 0%, #6b0000 100%);
-            transform: translateY(-3px);
-            box-shadow: 0 6px 20px rgba(210,10,10,0.6);
-        }
-        .btn-secondary {
-            background: transparent;
-            color: white;
-            border: 2px solid #ffffff;
-            box-shadow: 0 4px 15px rgba(255,255,255,0.1);
-        }
-        .btn-secondary:hover {
-            background: white;
-            color: #0d0d0d;
-            transform: translateY(-3px);
-            box-shadow: 0 6px 20px rgba(255,255,255,0.2);
-        }
-        .sidebar {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-        .sidebar-card {
-            background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
-            border-radius: 12px;
-            padding: 30px;
-            box-shadow: 0 8px 30px rgba(0,0,0,0.4);
-            border: 1px solid #333;
-            transition: transform 0.3s, box-shadow 0.3s;
-        }
-        .sidebar-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 12px 40px rgba(0,0,0,0.5);
-        }
-        .sidebar-card h3 {
-            font-family: 'Oswald', sans-serif;
-            font-size: 22px;
-            font-weight: 600;
-            letter-spacing: 1px;
-            margin-bottom: 25px;
-            color: #d20a0a;
-            text-transform: uppercase;
-            border-bottom: 2px solid #d20a0a;
-            padding-bottom: 10px;
-        }
-        .fight-card-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px 0;
-            border-bottom: 1px solid #333;
-            cursor: pointer;
-            transition: background 0.3s;
-            border-radius: 4px;
-            padding: 12px;
-        }
-        .fight-card-item:hover {
-            background: rgba(210,10,10,0.1);
-        }
-        .fight-card-item:last-child {
-            border-bottom: none;
-        }
-        .fighters-names {
-            flex: 1;
-        }
-        .fighters-names .name {
-            font-weight: 600;
-            font-size: 14px;
-        }
-        .fighters-names .record {
-            font-size: 12px;
-            color: #888;
-        }
-        .fight-date {
-            font-size: 12px;
-            color: #d20a0a;
-            font-weight: 600;
-        }
-        .ranking-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px 0;
-            border-bottom: 1px solid #333;
-            cursor: pointer;
-            transition: background 0.3s;
-            border-radius: 4px;
-            padding: 10px;
-        }
-        .ranking-item:hover {
-            background: rgba(210,10,10,0.1);
-        }
-        .ranking-item:last-child {
-            border-bottom: none;
-        }
-        .rank {
-            font-family: 'Oswald', sans-serif;
-            font-size: 24px;
-            font-weight: 700;
-            color: #d20a0a;
-            width: 40px;
-        }
-        .fighter-info {
-            flex: 1;
-        }
-        .fighter-info .name {
-            font-weight: 600;
-            font-size: 14px;
-        }
-        .fighter-info .record {
-            font-size: 12px;
-            color: #888;
-        }
-        .champion-badge {
-            background: #d20a0a;
-            color: white;
-            padding: 3px 8px;
-            border-radius: 3px;
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        .news-item {
-            padding: 15px 0;
-            border-bottom: 1px solid #333;
-            cursor: pointer;
-            transition: background 0.3s;
-            border-radius: 4px;
-            padding: 12px;
-        }
-        .news-item:hover {
-            background: rgba(210,10,10,0.1);
-        }
-        .news-item:last-child {
-            border-bottom: none;
-        }
-        .news-item h4 {
-            font-weight: 600;
-            font-size: 14px;
-            margin-bottom: 5px;
-            line-height: 1.4;
-        }
-        .news-item .date {
-            font-size: 11px;
-            color: #888;
-        }
-        .video-section {
-            background: linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%);
-            border-radius: 12px;
-            overflow: hidden;
-            margin-top: 30px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
-            border: 1px solid #333;
-        }
-        .video-container {
-            position: relative;
-            padding-bottom: 56.25%;
-            height: 0;
-            background: #000;
-        }
-        .video-container iframe,
-        .video-container video {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            border: none;
-        }
-        .stream-info {
-            padding: 20px;
-        }
-        .stream-title {
-            font-family: 'Oswald', sans-serif;
-            font-size: 28px;
-            margin-bottom: 10px;
-            letter-spacing: 1px;
-            color: #d20a0a;
-        }
-        .stream-meta {
-            color: #888;
-            font-size: 14px;
-            margin-bottom: 15px;
-        }
-        .live-badge {
-            background: linear-gradient(135deg, #d20a0a 0%, #8b0000 100%);
-            color: white;
-            padding: 6px 15px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: 700;
-            display: inline-block;
-            margin-bottom: 10px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            animation: pulse 2s infinite;
-            box-shadow: 0 0 15px rgba(210,10,10,0.5);
-        }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; box-shadow: 0 0 15px rgba(210,10,10,0.5); }
-            50% { opacity: 0.8; box-shadow: 0 0 25px rgba(210,10,10,0.8); }
-        }
-        .chat-section {
-            background: linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%);
-            border-radius: 12px;
-            display: flex;
-            flex-direction: column;
-            height: 500px;
-            margin-top: 20px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
-            border: 1px solid #333;
-        }
-        .chat-header {
-            padding: 15px 20px;
-            border-bottom: 1px solid #333;
-            font-weight: 600;
-            font-family: 'Oswald', sans-serif;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-        }
-        .chat-messages {
-            flex: 1;
-            overflow-y: auto;
-            padding: 15px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .chat-message {
-            background: #2a2a2a;
-            padding: 10px 15px;
-            border-radius: 5px;
-            word-wrap: break-word;
-        }
-        .chat-message .username {
-            color: #d20a0a;
-            font-weight: 600;
-            margin-bottom: 5px;
-            font-size: 13px;
-        }
-        .chat-message .message {
-            color: #ccc;
-            font-size: 14px;
-        }
-        .chat-message .time {
-            color: #666;
-            font-size: 11px;
-            margin-top: 5px;
-        }
-        .chat-input {
-            padding: 15px;
-            border-top: 1px solid #333;
-        }
-        .chat-input form {
-            display: flex;
-            gap: 10px;
-        }
-        .chat-input input {
-            flex: 1;
-            padding: 12px;
-            background: #2a2a2a;
-            border: 1px solid #333;
-            border-radius: 3px;
-            color: white;
-            font-size: 14px;
-        }
-        .chat-input input:focus {
-            outline: none;
-            border-color: #d20a0a;
-        }
-        .chat-input button {
-            padding: 12px 25px;
-            background: #d20a0a;
-            color: white;
-            border: none;
-            border-radius: 3px;
-            cursor: pointer;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        .chat-input button:hover {
-            background: #b30808;
-        }
-        .login-prompt {
-            background: #2a2a2a;
-            padding: 20px;
-            border-radius: 5px;
-            text-align: center;
-            margin-bottom: 15px;
-        }
-        .login-prompt a {
-            color: #d20a0a;
-            text-decoration: none;
-            font-weight: 600;
-        }
-        .footer {
-            background: linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%);
-            padding: 50px 30px;
-            margin-top: 60px;
-            border-top: 2px solid #d20a0a;
-        }
-        .footer-content {
-            max-width: 1200px;
-            margin: 0 auto;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .footer-links {
-            display: flex;
-            gap: 30px;
-        }
-        .footer-links a {
-            color: #888;
-            text-decoration: none;
-            font-size: 12px;
-            font-weight: 500;
-            letter-spacing: 1px;
-            transition: color 0.3s;
-        }
-        .footer-links a:hover {
-            color: #d20a0a;
-        }
-        .footer-copyright {
-            color: #666;
-            font-size: 12px;
-        }
-        .featured-section {
-            background: linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%);
-            padding: 60px 30px;
-            margin-top: 60px;
-            border-top: 2px solid #d20a0a;
-        }
-        .featured-section h2 {
-            font-family: 'Oswald', sans-serif;
-            font-size: 42px;
-            color: #d20a0a;
-            margin-bottom: 40px;
-            text-align: center;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-        }
-        .featured-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-            gap: 30px;
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-        .featured-card {
-            background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
-            border-radius: 12px;
-            overflow: hidden;
-            border: 1px solid #333;
-            transition: transform 0.3s, box-shadow 0.3s;
-            cursor: pointer;
-        }
-        .featured-card:hover {
-            transform: translateY(-8px);
-            box-shadow: 0 20px 50px rgba(0,0,0,0.6);
-        }
-        .featured-card-image {
-            height: 220px;
-            background: linear-gradient(135deg, #d20a0a 0%, #8b0000 100%);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 80px;
-            position: relative;
-            overflow: hidden;
-        }
-        .featured-card-image::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
-        }
-        .featured-card-content {
-            padding: 25px;
-        }
-        .featured-card h3 {
-            font-family: 'Oswald', sans-serif;
-            font-size: 20px;
-            margin-bottom: 12px;
-            color: #ffffff;
-            letter-spacing: 1px;
-        }
-        .featured-card p {
-            color: #888;
-            font-size: 15px;
-            line-height: 1.6;
-        }
-        .stats-section {
-            background: linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%);
-            padding: 60px 30px;
-            margin-top: 60px;
-            border-top: 2px solid #d20a0a;
-        }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 30px;
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-        .stat-card {
-            background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
-            border-radius: 12px;
-            padding: 40px;
-            text-align: center;
-            border: 1px solid #333;
-            transition: transform 0.3s, box-shadow 0.3s;
-        }
-        .stat-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 40px rgba(0,0,0,0.5);
-        }
-        .stat-number {
-            font-family: 'Oswald', sans-serif;
-            font-size: 56px;
-            font-weight: 700;
-            color: #d20a0a;
-            margin-bottom: 15px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
-        .stat-label {
-            color: #888;
-            font-size: 15px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            font-weight: 600;
-        }
-        @media (max-width: 1024px) {
-            .hero-content {
-                grid-template-columns: 1fr;
-            }
-            .navbar {
-                padding: 0 20px;
-            }
-            .nav-links {
-                gap: 15px;
-            }
-            .nav-links a {
-                font-size: 12px;
-            }
+            font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase;
+            letter-spacing: .5px; border: none; cursor: pointer; border-radius: 4px;
+            padding: 9px 18px; font-size: 14px; transition: transform .15s, background .2s;
+        }
+        .btn:hover { transform: translateY(-1px); }
+        .btn-outline { background: transparent; border: 1px solid #3a3a42; color: #fff; }
+        .btn-outline:hover { border-color: var(--red); }
+        .btn-red { background: var(--red); color: #fff; }
+        .btn-red:hover { background: #b00808; }
+
+        .wrap { max-width: 1320px; margin: 0 auto; padding: 22px; }
+
+        /* Hero grid */
+        .hero-grid { display: grid; grid-template-columns: 1.55fr 1fr; gap: 18px; }
+        .hero {
+            position: relative; border-radius: 10px; overflow: hidden; min-height: 430px;
+            background:
+                radial-gradient(120% 90% at 50% 0%, rgba(210,10,10,.25), transparent 60%),
+                linear-gradient(180deg, #1c1c22 0%, #0d0d10 100%);
+            border: 1px solid var(--line); display: flex; flex-direction: column; justify-content: flex-end;
+        }
+        .hero-faces { position: absolute; inset: 0; display: flex; justify-content: space-between; align-items: flex-end; }
+        .hero-faces img { max-height: 96%; max-width: 52%; width: auto; object-fit: contain; object-position: bottom; filter: drop-shadow(0 10px 24px rgba(0,0,0,.6)); }
+        .hero-faces .gradient-floor { position: absolute; bottom: 0; left: 0; right: 0; height: 55%; background: linear-gradient(180deg, transparent, rgba(11,11,13,.95)); }
+        .hero-content { position: relative; z-index: 2; text-align: center; padding: 28px 24px 30px; }
+        .event-badge { display: inline-block; background: var(--red); color: #fff; font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 13px; letter-spacing: 1px; padding: 5px 12px; border-radius: 3px; margin-bottom: 12px; text-transform: uppercase; }
+        .hero-title { font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 52px; line-height: .98; text-transform: uppercase; letter-spacing: 1px; }
+        .hero-title .vs { color: var(--red); }
+        .hero-sub { color: #cfcfd4; font-family: 'Oswald', sans-serif; font-weight: 500; letter-spacing: 2px; margin-top: 8px; text-transform: uppercase; font-size: 14px; }
+        .hero-date { color: var(--red); font-family: 'Oswald', sans-serif; font-weight: 600; margin-top: 12px; letter-spacing: 1px; }
+        .hero-meta { color: var(--muted); font-size: 13px; margin-top: 4px; }
+        .hero-actions { margin-top: 18px; display: flex; gap: 12px; justify-content: center; }
+
+        /* Fight card panel */
+        .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+        .card-head { background: #000; padding: 16px 18px; text-align: center; border-bottom: 1px solid var(--line); }
+        .card-head h3 { font-family: 'Oswald', sans-serif; font-size: 22px; letter-spacing: 1px; text-transform: uppercase; }
+        .card-head .sub { color: var(--muted); font-size: 12px; margin-top: 3px; text-transform: uppercase; letter-spacing: 1px; }
+        .tabs { display: flex; border-bottom: 1px solid var(--line); }
+        .tab { flex: 1; padding: 12px 6px; background: var(--panel-2); border: none; color: var(--muted); font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: .5px; text-transform: uppercase; cursor: pointer; border-bottom: 2px solid transparent; }
+        .tab.active { color: #fff; background: var(--panel); border-bottom-color: var(--red); }
+        .bouts { max-height: 470px; overflow-y: auto; }
+        .bout { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+        .bout:hover { background: var(--panel-2); }
+        .bout .f { display: flex; align-items: center; gap: 10px; min-width: 0; }
+        .bout .f.right { flex-direction: row-reverse; text-align: right; }
+        .bout .f img { width: 46px; height: 46px; border-radius: 50%; object-fit: cover; background: #000; border: 1px solid var(--line); }
+        .bout .nm { font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 14px; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .bout .rec { color: var(--muted); font-size: 11px; }
+        .bout .mid { text-align: center; min-width: 64px; }
+        .bout .mid .vs { color: var(--red); font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 13px; }
+        .bout .mid .wc { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .5px; margin-top: 2px; }
+        .card-foot { padding: 14px; }
+        .card-foot .btn { width: 100%; }
+
+        /* Section heading */
+        .section { margin-top: 22px; }
+        .section-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+        .section-title h2 { font-family: 'Oswald', sans-serif; font-size: 20px; letter-spacing: 1px; text-transform: uppercase; }
+        .section-title a { color: var(--red); font-family: 'Oswald', sans-serif; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; }
+
+        /* Events carousel */
+        .events-row { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(220px, 1fr); gap: 14px; overflow-x: auto; padding-bottom: 6px; }
+        .event-card {
+            position: relative; border-radius: 8px; overflow: hidden; border: 1px solid var(--line);
+            background: linear-gradient(135deg, #1d1d23, #0e0e11); padding: 18px 16px; min-height: 110px; cursor: pointer;
+            transition: transform .15s, border-color .2s;
+        }
+        .event-card:hover { transform: translateY(-3px); border-color: var(--red); }
+        .event-card .en { font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 20px; }
+        .event-card .en span { color: var(--red); }
+        .event-card .ed { color: #fff; font-family: 'Oswald', sans-serif; font-weight: 600; letter-spacing: 1px; margin-top: 8px; text-transform: uppercase; font-size: 13px; }
+        .event-card .ev { color: var(--muted); font-size: 12px; margin-top: 3px; }
+
+        /* Bottom grid */
+        .bottom-grid { display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: 18px; }
+
+        /* Featured fighter */
+        .fighter-card { position: relative; }
+        .fighter-card .fc-body { display: flex; gap: 14px; padding: 18px; }
+        .fighter-card .fc-info { flex: 1; }
+        .fighter-card .fc-name { font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 26px; line-height: 1; text-transform: uppercase; }
+        .fighter-card .fc-name small { display: block; font-size: 13px; color: var(--muted); font-weight: 500; letter-spacing: 1px; }
+        .fighter-card .fc-photo { width: 130px; }
+        .fighter-card .fc-photo img { width: 130px; height: 150px; object-fit: cover; object-position: top; border-radius: 8px; background: #000; }
+        .fc-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin-top: 14px; }
+        .fc-stats .s .n { font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 18px; }
+        .fc-stats .s .l { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
+        .fc-country { display: flex; align-items: center; gap: 8px; margin-top: 6px; color: var(--muted); font-size: 13px; }
+        .fc-country img { width: 22px; height: auto; border-radius: 2px; }
+        .fc-champ { display: inline-block; background: var(--red); color: #fff; font-size: 10px; font-weight: 700; letter-spacing: 1px; padding: 3px 8px; border-radius: 3px; text-transform: uppercase; margin-top: 8px; }
+        .fc-tabs { display: flex; gap: 16px; padding: 12px 18px; border-top: 1px solid var(--line); }
+        .fc-tabs span { color: var(--muted); font-family: 'Oswald', sans-serif; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; cursor: pointer; }
+        .fc-tabs span:first-child { color: var(--red); border-bottom: 2px solid var(--red); padding-bottom: 4px; }
+
+        /* News */
+        .news-panel { padding: 0; }
+        .news-lead { position: relative; border-radius: 10px 10px 0 0; overflow: hidden; }
+        .news-lead img { width: 100%; height: 230px; object-fit: cover; }
+        .news-lead .ov { position: absolute; bottom: 0; left: 0; right: 0; padding: 16px; background: linear-gradient(transparent, rgba(0,0,0,.92)); }
+        .news-lead .ov h3 { font-family: 'Oswald', sans-serif; font-size: 22px; line-height: 1.05; text-transform: uppercase; }
+        .news-lead .ov .t { color: var(--muted); font-size: 12px; margin-top: 6px; }
+        .news-list { padding: 6px 0; }
+        .news-item { display: flex; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--line); cursor: pointer; }
+        .news-item:hover { background: var(--panel-2); }
+        .news-item img { width: 84px; height: 56px; object-fit: cover; border-radius: 5px; flex: 0 0 auto; background: #000; }
+        .news-item .nt { font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 14px; line-height: 1.15; }
+        .news-item .nd { color: var(--muted); font-size: 11px; margin-top: 5px; }
+
+        /* Tale of the tape */
+        .tape-head { background: #000; text-align: center; padding: 14px; border-bottom: 1px solid var(--line); }
+        .tape-head h3 { font-family: 'Oswald', sans-serif; font-size: 18px; letter-spacing: 1px; text-transform: uppercase; }
+        .tape-fighters { display: grid; grid-template-columns: 1fr 1fr; }
+        .tape-fighters .tf { padding: 16px 12px; text-align: center; }
+        .tape-fighters .tf:first-child { border-right: 1px solid var(--line); }
+        .tape-fighters .tf img { width: 84px; height: 84px; border-radius: 50%; object-fit: cover; margin: 0 auto 8px; background: #000; border: 2px solid var(--red); }
+        .tape-fighters .tf .nm { font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 16px; text-transform: uppercase; line-height: 1; }
+        .tape-rows { padding: 6px 0 14px; }
+        .tape-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 9px 16px; }
+        .tape-row .v { font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 15px; }
+        .tape-row .v.a { text-align: left; }
+        .tape-row .v.b { text-align: right; }
+        .tape-row .k { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
+
+        /* Live stream + chat */
+        .stream-grid { display: grid; grid-template-columns: 1fr 340px; gap: 18px; }
+        .video-container { position: relative; padding-bottom: 56.25%; height: 0; background: #000; border-radius: 10px 10px 0 0; overflow: hidden; }
+        .video-container iframe, .video-container video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
+        .stream-info { padding: 16px 18px; }
+        .live-badge { display: inline-block; background: var(--red); color: #fff; font-weight: 700; font-size: 11px; padding: 3px 9px; border-radius: 3px; letter-spacing: 1px; text-transform: uppercase; }
+        .stream-title { font-family: 'Oswald', sans-serif; font-size: 22px; margin-top: 8px; }
+        .stream-meta { color: var(--muted); font-size: 13px; margin-top: 4px; }
+        .stream-description { margin-top: 10px; color: #cfcfd4; font-size: 14px; }
+        .no-stream { text-align: center; padding: 70px 20px; color: var(--muted); }
+        .no-stream h2 { font-family: 'Oswald', sans-serif; font-size: 28px; margin-bottom: 8px; color: #fff; }
+        .chat-section { display: flex; flex-direction: column; height: 100%; min-height: 420px; }
+        .chat-header { background: #000; padding: 14px 16px; font-family: 'Oswald', sans-serif; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; border-bottom: 1px solid var(--line); }
+        .chat-messages { flex: 1; overflow-y: auto; padding: 14px 16px; max-height: 360px; }
+        .chat-message { margin-bottom: 12px; }
+        .chat-message .username { color: var(--red); font-weight: 700; font-size: 13px; }
+        .chat-message .message { font-size: 14px; color: #e8e8ea; }
+        .chat-message .time { color: #66666e; font-size: 10px; margin-top: 2px; }
+        .login-prompt { padding: 14px 16px; color: var(--muted); font-size: 14px; }
+        .login-prompt a { color: var(--red); font-weight: 600; }
+        .chat-input { padding: 12px; border-top: 1px solid var(--line); }
+        .chat-input form { display: flex; gap: 8px; }
+        .chat-input input { flex: 1; padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px; color: #fff; }
+        .chat-input input:focus { outline: none; border-color: var(--red); }
+        .chat-input button { padding: 10px 16px; background: var(--red); color: #fff; border: none; border-radius: 5px; font-weight: 600; cursor: pointer; }
+
+        /* Footer */
+        .footer { border-top: 1px solid var(--line); margin-top: 30px; padding: 26px; text-align: center; }
+        .footer-links { display: flex; gap: 22px; justify-content: center; margin-bottom: 12px; flex-wrap: wrap; }
+        .footer-links a { color: var(--muted); font-size: 13px; }
+        .footer-links a:hover { color: var(--red); }
+        .footer-copyright { color: #66666e; font-size: 12px; }
+
+        @media (max-width: 1000px) {
+            .hero-grid, .bottom-grid, .stream-grid { grid-template-columns: 1fr; }
+            .hero-title { font-size: 40px; }
+            .nav-links { display: none; }
         }
     </style>
 </head>
 <body>
-    <div class="top-bar">
-        🥊 FREE UFC STREAMS - LIVE EVENTS & FIGHT CARDS - JOIN OUR DISCORD 🥊
-    </div>
-    
+    <div class="top-bar">FREE UFC STREAMS &bull; LIVE EVENTS &amp; FIGHT CARDS &bull; JOIN OUR DISCORD</div>
+
     <nav class="navbar">
-        <div class="logo">UFC<span>.SOLUTIONS</span></div>
+        <div class="logo" onclick="window.scrollTo({top:0,behavior:'smooth'})">UFC<span>.SOLUTIONS</span></div>
         <div class="nav-links">
-            <a href="#">Home</a>
-            <a href="#">Fights</a>
-            <a href="#">Rankings</a>
-            <a href="#">Fighters</a>
-            <a href="#">News</a>
+            <a href="#events">Events</a>
+            <a href="#card">Fighters</a>
+            <a href="#card">Rankings</a>
+            <a href="#news">News</a>
+            <a href="#video-section">Video</a>
             <a href="https://discord.gg/Dh2gUUgYTg" target="_blank">Discord</a>
-            <?php if (isAdmin()): ?>
-                <a href="admin.php">Admin</a>
-            <?php endif; ?>
+            <?php if (isAdmin()): ?><a href="admin.php">Admin</a><?php endif; ?>
+        </div>
+        <div class="nav-right">
+            <button class="icon-btn" title="Search">&#128269;</button>
             <?php if (isLoggedIn()): ?>
-                <a href="logout.php">Logout</a>
+                <span style="color:var(--muted);font-size:13px;">Hi, <?php echo htmlspecialchars($_SESSION['username']); ?></span>
+                <a href="logout.php" class="btn btn-outline">Logout</a>
             <?php else: ?>
-                <a href="login.php">Login</a>
+                <a href="login.php" class="btn btn-outline">Sign In</a>
+                <a href="signup.php" class="btn btn-red">Sign Up</a>
             <?php endif; ?>
-            <a href="#" class="live-btn">Live</a>
         </div>
     </nav>
-    
-    <div class="hero-section">
-        <div class="hero-content">
-            <div class="main-fight">
-                <div class="fight-banner">
-                    <?php if (!empty($ufc_events) && isset($ufc_events[0])): ?>
-                        <?php $main_event = $ufc_events[0]; ?>
-                        <h2><?php echo htmlspecialchars($main_event['event_name'] ?? ($main_event['name'] ?? 'UFC Event')); ?></h2>
-                        <div class="subtitle">
-                            <?php
-                            if (isset($main_event['main_event'])) {
-                                echo htmlspecialchars($main_event['main_event']['fighter_a']) . ' VS ' . htmlspecialchars($main_event['main_event']['fighter_b']);
-                            } else {
-                                echo 'MAIN EVENT';
-                            }
-                            ?>
+
+    <div class="wrap">
+        <!-- HERO + FIGHT CARD -->
+        <div class="hero-grid">
+            <div class="hero">
+                <?php if ($main_bout): ?>
+                    <div class="hero-faces">
+                        <img class="left" src="<?php echo htmlspecialchars($main_bout['photo_a'] ?: $silhouette); ?>" onerror="this.src='<?php echo $silhouette; ?>'" alt="">
+                        <img class="right" src="<?php echo htmlspecialchars($main_bout['photo_b'] ?: $silhouette); ?>" onerror="this.src='<?php echo $silhouette; ?>'" alt="">
+                        <div class="gradient-floor"></div>
+                    </div>
+                <?php endif; ?>
+                <div class="hero-content">
+                    <?php if ($primary_event): ?>
+                        <span class="event-badge"><?php echo htmlspecialchars($primary_event['short_name'] ?? 'UFC'); ?></span>
+                        <?php if ($main_bout): ?>
+                            <div class="hero-title oswald">
+                                <?php echo htmlspecialchars(last_name($main_bout['fighter_a'])); ?>
+                                <span class="vs">VS</span>
+                                <?php echo htmlspecialchars(last_name($main_bout['fighter_b'])); ?>
+                            </div>
+                            <div class="hero-sub"><?php echo htmlspecialchars($main_bout['weight_class']); ?> Bout</div>
+                        <?php else: ?>
+                            <div class="hero-title oswald"><?php echo htmlspecialchars($primary_event['event_name']); ?></div>
+                        <?php endif; ?>
+                        <div class="hero-date"><?php echo strtoupper(date('l, F j', strtotime($primary_event['date'] ?? 'now'))); ?> &bull; <?php echo date('g:i A', strtotime($primary_event['date'] ?? 'now')); ?> ET</div>
+                        <?php if (!empty($primary_event['venue'])): ?>
+                            <div class="hero-meta"><?php echo htmlspecialchars($primary_event['venue']); ?></div>
+                        <?php endif; ?>
+                        <div class="hero-actions">
+                            <a href="#video-section" class="btn btn-red">Watch Live</a>
+                            <a href="#card" class="btn btn-outline">View Card</a>
                         </div>
                     <?php else: ?>
-                        <h2>UFC EVENT</h2>
-                        <div class="subtitle">MAIN EVENT</div>
+                        <div class="hero-title oswald">UFC EVENT</div>
                     <?php endif; ?>
-                </div>
-                <div class="fighters">
-                    <?php if (!empty($ufc_events) && isset($ufc_events[0]['main_event'])): ?>
-                        <?php $main_event = $ufc_events[0]['main_event']; ?>
-                        <div class="fighter">
-                            <div class="fighter-image">🥊</div>
-                            <div class="fighter-name"><?php echo htmlspecialchars($main_event['fighter_a']); ?></div>
-                        </div>
-                        <div class="vs">VS</div>
-                        <div class="fighter">
-                            <div class="fighter-image">🥊</div>
-                            <div class="fighter-name"><?php echo htmlspecialchars($main_event['fighter_b']); ?></div>
-                        </div>
-                    <?php else: ?>
-                        <div class="fighter">
-                            <div class="fighter-image">🥊</div>
-                            <div class="fighter-name">Fighter A</div>
-                        </div>
-                        <div class="vs">VS</div>
-                        <div class="fighter">
-                            <div class="fighter-image">🥊</div>
-                            <div class="fighter-name">Fighter B</div>
-                        </div>
-                    <?php endif; ?>
-                </div>
-                <div class="fight-actions">
-                    <button class="btn btn-primary" onclick="document.getElementById('video-section').scrollIntoView({behavior: 'smooth'})">Watch Live</button>
-                    <button class="btn btn-secondary" onclick="document.querySelector('.sidebar-card').scrollIntoView({behavior: 'smooth'})">View Fight Card</button>
                 </div>
             </div>
-            
-            <div class="sidebar">
-                <div class="sidebar-card">
-                    <h3>Upcoming Fight Card</h3>
-                    <?php if (!empty($ufc_events) && isset($ufc_events[0]['fight_card'])): ?>
-                        <?php foreach ($ufc_events[0]['fight_card'] as $fight): ?>
-                            <div class="fight-card-item">
-                                <div class="fighters-names">
-                                    <div class="name"><?php echo htmlspecialchars($fight['fighter_a'] ?? 'Fighter A'); ?> vs <?php echo htmlspecialchars($fight['fighter_b'] ?? 'Fighter B'); ?></div>
-                                    <div class="record"><?php echo htmlspecialchars($fight['record_a'] ?? '0-0-0'); ?> vs <?php echo htmlspecialchars($fight['record_b'] ?? '0-0-0'); ?></div>
-                                </div>
-                                <div class="fight-date"><?php echo date('M d D', strtotime($ufc_events[0]['date'] ?? 'now')); ?></div>
-                            </div>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <div class="fight-card-item">
-                            <div class="fighters-names">
-                                <div class="name">Fighter A vs Fighter B</div>
-                                <div class="record">0-0-0 vs 0-0-0</div>
-                            </div>
-                            <div class="fight-date">MAIN CARD</div>
-                        </div>
-                    <?php endif; ?>
+
+            <div class="panel" id="card">
+                <div class="card-head">
+                    <h3><?php echo htmlspecialchars($primary_event['short_name'] ?? 'Fight Card'); ?></h3>
+                    <div class="sub">
+                        <?php if ($primary_event): ?>
+                            <?php echo strtoupper(date('D, M j', strtotime($primary_event['date']))); ?>
+                            <?php if (!empty($primary_event['venue'])): ?> &bull; <?php echo htmlspecialchars($primary_event['venue']); ?><?php endif; ?>
+                        <?php endif; ?>
+                    </div>
                 </div>
-                
-                <div class="sidebar-card">
-                    <h3>Rankings<?php echo !empty($ufc_rankings[0]['weight_class']) ? ' - ' . htmlspecialchars($ufc_rankings[0]['weight_class']) : ''; ?></h3>
-                    <?php if (!empty($ufc_rankings)): ?>
-                        <?php foreach ($ufc_rankings as $index => $fighter): ?>
-                            <div class="ranking-item">
-                                <div class="rank"><?php echo htmlspecialchars($fighter['rank'] ?? ($index + 1)); ?></div>
-                                <div class="fighter-info">
-                                    <div class="name">
-                                        <?php echo htmlspecialchars($fighter['fighter'] ?? 'Unknown'); ?>
-                                        <?php if (isset($fighter['rank']) && $fighter['rank'] === 'C'): ?>
-                                            <span class="champion-badge">Champion</span>
-                                        <?php endif; ?>
+                <?php $cardBouts = $primary_event['fight_card'] ?? []; ?>
+                <?php if (!empty($cardBouts) && isset($cardBouts[0]['photo_a'])): ?>
+                    <div class="tabs">
+                        <button class="tab active" data-seg="main">Main Card</button>
+                        <button class="tab" data-seg="prelims">Prelims</button>
+                        <button class="tab" data-seg="early">Early Prelims</button>
+                    </div>
+                    <div class="bouts">
+                        <?php foreach ($cardBouts as $bout): ?>
+                            <div class="bout" data-seg="<?php echo htmlspecialchars($bout['segment'] ?? 'main'); ?>"<?php echo ($bout['segment'] ?? 'main') !== 'main' ? ' style="display:none"' : ''; ?>>
+                                <div class="f">
+                                    <img src="<?php echo htmlspecialchars($bout['photo_a'] ?: $silhouette); ?>" onerror="this.src='<?php echo $silhouette; ?>'" alt="">
+                                    <div>
+                                        <div class="nm"><?php echo htmlspecialchars($bout['fighter_a']); ?></div>
+                                        <div class="rec"><?php echo htmlspecialchars($bout['record_a']); ?></div>
                                     </div>
-                                    <div class="record"><?php echo htmlspecialchars($fighter['record'] ?? '0-0-0'); ?></div>
+                                </div>
+                                <div class="mid">
+                                    <div class="vs">VS</div>
+                                    <div class="wc"><?php echo htmlspecialchars($bout['weight_class']); ?></div>
+                                </div>
+                                <div class="f right">
+                                    <img src="<?php echo htmlspecialchars($bout['photo_b'] ?: $silhouette); ?>" onerror="this.src='<?php echo $silhouette; ?>'" alt="">
+                                    <div>
+                                        <div class="nm"><?php echo htmlspecialchars($bout['fighter_b']); ?></div>
+                                        <div class="rec"><?php echo htmlspecialchars($bout['record_b']); ?></div>
+                                    </div>
                                 </div>
                             </div>
                         <?php endforeach; ?>
-                    <?php else: ?>
-                        <div class="ranking-item">
-                            <div class="rank">C</div>
-                            <div class="fighter-info">
-                                <div class="name">Islam Makhachev <span class="champion-badge">Champion</span></div>
-                                <div class="record">25-1-0</div>
-                            </div>
-                        </div>
-                        <div class="ranking-item">
-                            <div class="rank">1</div>
-                            <div class="fighter-info">
-                                <div class="name">Charles Oliveira</div>
-                                <div class="record">34-10-0</div>
-                            </div>
-                        </div>
-                        <div class="ranking-item">
-                            <div class="rank">2</div>
-                            <div class="fighter-info">
-                                <div class="name">Dustin Poirier</div>
-                                <div class="record">29-8-0</div>
-                            </div>
-                        </div>
-                        <div class="ranking-item">
-                            <div class="rank">3</div>
-                            <div class="fighter-info">
-                                <div class="name">Justin Gaethje</div>
-                                <div class="record">25-4-0</div>
-                            </div>
-                        </div>
-                        <div class="ranking-item">
-                            <div class="rank">4</div>
-                            <div class="fighter-info">
-                                <div class="name">Michael Chandler</div>
-                                <div class="record">23-8-0</div>
-                            </div>
-                        </div>
-                    <?php endif; ?>
-                </div>
-                
-                <div class="sidebar-card">
-                    <h3>Latest News</h3>
-                    <?php if (!empty($ufc_news)): ?>
-                        <?php foreach ($ufc_news as $news): ?>
-                            <div class="news-item">
-                                <h4><?php echo htmlspecialchars($news['title'] ?? 'News Headline'); ?></h4>
-                                <div class="date"><?php echo htmlspecialchars($news['date'] ?? 'Just now'); ?></div>
+                    </div>
+                <?php else: ?>
+                    <div class="bouts">
+                        <?php foreach ($cardBouts as $bout): ?>
+                            <div class="bout">
+                                <div class="f"><div><div class="nm"><?php echo htmlspecialchars($bout['fighter_a'] ?? 'TBD'); ?></div><div class="rec"><?php echo htmlspecialchars($bout['record_a'] ?? ''); ?></div></div></div>
+                                <div class="mid"><div class="vs">VS</div><div class="wc"><?php echo htmlspecialchars($bout['weight_class'] ?? ''); ?></div></div>
+                                <div class="f right"><div><div class="nm"><?php echo htmlspecialchars($bout['fighter_b'] ?? 'TBD'); ?></div><div class="rec"><?php echo htmlspecialchars($bout['record_b'] ?? ''); ?></div></div></div>
                             </div>
                         <?php endforeach; ?>
-                    <?php else: ?>
-                        <div class="news-item">
-                            <h4>Makhachev: "I'm Ready For Anyone"</h4>
-                            <div class="date">2 hours ago</div>
-                        </div>
-                        <div class="news-item">
-                            <h4>Chandler vs Oliveira Rematch Announced</h4>
-                            <div class="date">5 hours ago</div>
-                        </div>
-                        <div class="news-item">
-                            <h4>UFC Fight Night 248 Card Official</h4>
-                            <div class="date">1 day ago</div>
-                        </div>
-                    <?php endif; ?>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="hero-content" style="padding: 0 30px;">
-        <div class="video-section" id="video-section">
-            <?php if ($current_stream): ?>
-                <div class="video-container">
-                    <?php if (strpos($current_stream['video_url'], 'youtube.com') !== false || strpos($current_stream['video_url'], 'youtu.be') !== false): ?>
-                        <?php
-                        $video_id = '';
-                        if (preg_match('/youtube\.com\/watch\?v=([a-zA-Z0-9_-]+)/', $current_stream['video_url'], $matches)) {
-                            $video_id = $matches[1];
-                        } elseif (preg_match('/youtu\.be\/([a-zA-Z0-9_-]+)/', $current_stream['video_url'], $matches)) {
-                            $video_id = $matches[1];
-                        }
-                        ?>
-                        <iframe src="https://www.youtube.com/embed/<?php echo $video_id; ?>" allowfullscreen></iframe>
-                    <?php elseif (strpos($current_stream['video_url'], 'vimeo.com') !== false): ?>
-                        <?php
-                        $video_id = '';
-                        if (preg_match('/vimeo\.com\/(\d+)/', $current_stream['video_url'], $matches)) {
-                            $video_id = $matches[1];
-                        }
-                        ?>
-                        <iframe src="https://player.vimeo.com/video/<?php echo $video_id; ?>" allowfullscreen></iframe>
-                    <?php else: ?>
-                        <video controls>
-                            <source src="<?php echo htmlspecialchars($current_stream['video_url']); ?>" type="video/mp4">
-                            Your browser does not support the video tag.
-                        </video>
-                    <?php endif; ?>
-                </div>
-                <div class="stream-info">
-                    <?php if ($current_stream['is_live']): ?>
-                        <span class="live-badge">Live</span>
-                    <?php endif; ?>
-                    <h2 class="stream-title"><?php echo htmlspecialchars($current_stream['title']); ?></h2>
-                    <div class="stream-meta">
-                        Streamed by <?php echo htmlspecialchars($current_stream['creator_username']); ?> • 
-                        <?php echo date('M j, Y g:i A', strtotime($current_stream['created_at'])); ?>
-                    </div>
-                    <?php if ($current_stream['description']): ?>
-                        <div class="stream-description">
-                            <?php echo nl2br(htmlspecialchars($current_stream['description'])); ?>
-                        </div>
-                    <?php endif; ?>
-                </div>
-            <?php else: ?>
-                <div style="text-align: center; padding: 60px 20px; color: #888;">
-                    <h2 style="font-family: 'Oswald', sans-serif; font-size: 32px; margin-bottom: 15px;">No Live Stream</h2>
-                    <p>Check back later for upcoming events</p>
-                </div>
-            <?php endif; ?>
-        </div>
-        
-        <div class="sidebar">
-            <div class="chat-section">
-                <div class="chat-header">Live Chat</div>
-                <?php if (!isLoggedIn()): ?>
-                    <div class="login-prompt">
-                        <a href="login.php">Login</a> to participate in chat
                     </div>
                 <?php endif; ?>
-                <div class="chat-messages" id="chatMessages">
-                    <div class="chat-message">
-                        <div class="username">System</div>
-                        <div class="message">Welcome to the UFC chat! Be respectful and have fun.</div>
+                <div class="card-foot"><a href="#video-section" class="btn btn-red">View Full Fight Card</a></div>
+            </div>
+        </div>
+
+        <!-- UPCOMING EVENTS -->
+        <div class="section" id="events">
+            <div class="section-title"><h2>Upcoming Events</h2><a href="#">View All</a></div>
+            <div class="events-row">
+                <?php foreach ($ufc_events as $ev): ?>
+                    <?php
+                    $en = $ev['short_name'] ?? ($ev['event_name'] ?? 'UFC');
+                    $en = preg_replace('/^UFC\s*/', 'UFC ', $en);
+                    ?>
+                    <div class="event-card" onclick="document.getElementById('card').scrollIntoView({behavior:'smooth'})">
+                        <div class="en"><?php echo htmlspecialchars($en); ?></div>
+                        <div class="ed"><?php echo strtoupper(date('M j D', strtotime($ev['date'] ?? 'now'))); ?></div>
+                        <div class="ev"><?php echo htmlspecialchars($ev['venue'] ?: 'Venue TBA'); ?></div>
                     </div>
-                </div>
-                <?php if (isLoggedIn()): ?>
-                    <div class="chat-input">
-                        <form id="chatForm">
-                            <input type="text" id="messageInput" placeholder="Type a message..." maxlength="500">
-                            <button type="submit">Send</button>
-                        </form>
+                <?php endforeach; ?>
+            </div>
+        </div>
+
+        <!-- BOTTOM GRID -->
+        <div class="section bottom-grid">
+            <!-- Featured fighter -->
+            <div class="panel fighter-card">
+                <?php $ff = $fighter_a_detail; ?>
+                <?php if ($ff): ?>
+                    <div class="fc-body">
+                        <div class="fc-info">
+                            <div class="fc-name">
+                                <?php echo htmlspecialchars($ff['name']); ?>
+                                <?php if (!empty($ff['nickname'])): ?><small>"<?php echo htmlspecialchars($ff['nickname']); ?>"</small><?php endif; ?>
+                            </div>
+                            <?php if (!empty($ff['weight_class'])): ?><span class="fc-champ"><?php echo htmlspecialchars($ff['weight_class']); ?></span><?php endif; ?>
+                            <div class="fc-country">
+                                <?php if (!empty($ff['flag'])): ?><img src="<?php echo htmlspecialchars($ff['flag']); ?>" alt=""><?php endif; ?>
+                                <?php echo htmlspecialchars($ff['country'] ?: ''); ?>
+                            </div>
+                            <div class="fc-stats">
+                                <div class="s"><div class="n"><?php echo htmlspecialchars($main_bout['record_a'] ?? '—'); ?></div><div class="l">Record</div></div>
+                                <div class="s"><div class="n"><?php echo htmlspecialchars(tape_val($ff['height'])); ?></div><div class="l">Height</div></div>
+                                <div class="s"><div class="n"><?php echo htmlspecialchars(tape_val($ff['reach'])); ?></div><div class="l">Reach</div></div>
+                                <div class="s"><div class="n"><?php echo htmlspecialchars(tape_val($ff['stance'])); ?></div><div class="l">Stance</div></div>
+                            </div>
+                        </div>
+                        <div class="fc-photo">
+                            <img src="<?php echo htmlspecialchars($ff['photo'] ?: $silhouette); ?>" onerror="this.src='<?php echo $silhouette; ?>'" alt="">
+                        </div>
                     </div>
+                    <div class="fc-tabs"><span>Overview</span><span>Stats</span><span>Fights</span><span>News</span><span>Videos</span></div>
+                <?php else: ?>
+                    <div class="card-head"><h3>Featured Fighter</h3></div>
+                    <div style="padding:30px;text-align:center;color:var(--muted)">Fighter spotlight loading…</div>
+                <?php endif; ?>
+            </div>
+
+            <!-- Latest news -->
+            <div class="panel news-panel" id="news">
+                <?php $newsLead = $ufc_news[0] ?? null; $newsRest = array_slice($ufc_news, 1, 4); ?>
+                <?php if ($newsLead): ?>
+                    <a class="news-lead" href="<?php echo htmlspecialchars($newsLead['link'] ?? '#'); ?>" target="_blank">
+                        <img src="<?php echo htmlspecialchars($newsLead['image'] ?: $silhouette); ?>" onerror="this.src='<?php echo $silhouette; ?>'" alt="">
+                        <div class="ov">
+                            <h3><?php echo htmlspecialchars($newsLead['title']); ?></h3>
+                            <div class="t"><?php echo htmlspecialchars($newsLead['date'] ?? ''); ?></div>
+                        </div>
+                    </a>
+                    <div class="news-list">
+                        <?php foreach ($newsRest as $n): ?>
+                            <a class="news-item" href="<?php echo htmlspecialchars($n['link'] ?? '#'); ?>" target="_blank">
+                                <?php if (!empty($n['image'])): ?><img src="<?php echo htmlspecialchars($n['image']); ?>" onerror="this.style.display='none'" alt=""><?php endif; ?>
+                                <div>
+                                    <div class="nt"><?php echo htmlspecialchars($n['title']); ?></div>
+                                    <div class="nd"><?php echo htmlspecialchars($n['date'] ?? ''); ?></div>
+                                </div>
+                            </a>
+                        <?php endforeach; ?>
+                    </div>
+                <?php else: ?>
+                    <div class="card-head"><h3>Latest News</h3></div>
+                    <div style="padding:30px;text-align:center;color:var(--muted)">No news available.</div>
+                <?php endif; ?>
+            </div>
+
+            <!-- Tale of the tape -->
+            <div class="panel">
+                <div class="tape-head"><h3>Tale of the Tape</h3></div>
+                <?php if ($fighter_a_detail && $fighter_b_detail): ?>
+                    <div class="tape-fighters">
+                        <div class="tf">
+                            <img src="<?php echo htmlspecialchars($fighter_a_detail['photo'] ?: $silhouette); ?>" onerror="this.src='<?php echo $silhouette; ?>'" alt="">
+                            <div class="nm"><?php echo htmlspecialchars(last_name($fighter_a_detail['name'])); ?></div>
+                        </div>
+                        <div class="tf">
+                            <img src="<?php echo htmlspecialchars($fighter_b_detail['photo'] ?: $silhouette); ?>" onerror="this.src='<?php echo $silhouette; ?>'" alt="">
+                            <div class="nm"><?php echo htmlspecialchars(last_name($fighter_b_detail['name'])); ?></div>
+                        </div>
+                    </div>
+                    <div class="tape-rows">
+                        <?php
+                        $rows = [
+                            ['Record', $main_bout['record_a'] ?? '', $main_bout['record_b'] ?? ''],
+                            ['Height', $fighter_a_detail['height'], $fighter_b_detail['height']],
+                            ['Reach', $fighter_a_detail['reach'], $fighter_b_detail['reach']],
+                            ['Weight', $fighter_a_detail['weight'], $fighter_b_detail['weight']],
+                            ['Age', $fighter_a_detail['age'], $fighter_b_detail['age']],
+                            ['Stance', $fighter_a_detail['stance'], $fighter_b_detail['stance']],
+                        ];
+                        foreach ($rows as $r): ?>
+                            <div class="tape-row">
+                                <div class="v a"><?php echo htmlspecialchars(tape_val($r[1])); ?></div>
+                                <div class="k"><?php echo htmlspecialchars($r[0]); ?></div>
+                                <div class="v b"><?php echo htmlspecialchars(tape_val($r[2])); ?></div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php else: ?>
+                    <div style="padding:30px;text-align:center;color:var(--muted)">Comparison unavailable.</div>
                 <?php endif; ?>
             </div>
         </div>
-    </div>
-    
-    <div class="featured-section">
-        <h2>🔥 FEATURED FIGHTS</h2>
-        <div class="featured-grid">
-            <?php foreach ($featured_fights as $fight): ?>
-                <div class="featured-card">
-                    <div class="featured-card-image">🥊</div>
-                    <div class="featured-card-content">
-                        <h3><?php echo htmlspecialchars($fight['name']); ?></h3>
-                        <p><?php echo htmlspecialchars($fight['fighters']); ?></p>
-                        <p style="color: <?php echo $fight['status'] === 'LIVE NOW' ? '#d20a0a' : '#888'; ?>; font-weight: 600; margin-top: 10px;">
-                            <?php echo $fight['status'] === 'LIVE NOW' ? '🔴 ' : ''; ?><?php echo htmlspecialchars($fight['status']); ?>
-                        </p>
-                    </div>
+
+        <!-- LIVE STREAM + CHAT -->
+        <div class="section">
+            <div class="section-title"><h2>Live Stream</h2></div>
+            <div class="stream-grid">
+                <div class="panel" id="video-section">
+                    <?php if ($current_stream): ?>
+                        <div class="video-container">
+                            <?php if (strpos($current_stream['video_url'], 'youtube.com') !== false || strpos($current_stream['video_url'], 'youtu.be') !== false): ?>
+                                <?php
+                                $video_id = '';
+                                if (preg_match('/youtube\.com\/watch\?v=([a-zA-Z0-9_-]+)/', $current_stream['video_url'], $matches)) {
+                                    $video_id = $matches[1];
+                                } elseif (preg_match('/youtu\.be\/([a-zA-Z0-9_-]+)/', $current_stream['video_url'], $matches)) {
+                                    $video_id = $matches[1];
+                                }
+                                ?>
+                                <iframe src="https://www.youtube.com/embed/<?php echo $video_id; ?>" allowfullscreen></iframe>
+                            <?php elseif (strpos($current_stream['video_url'], 'vimeo.com') !== false): ?>
+                                <?php
+                                $video_id = '';
+                                if (preg_match('/vimeo\.com\/(\d+)/', $current_stream['video_url'], $matches)) {
+                                    $video_id = $matches[1];
+                                }
+                                ?>
+                                <iframe src="https://player.vimeo.com/video/<?php echo $video_id; ?>" allowfullscreen></iframe>
+                            <?php else: ?>
+                                <video controls>
+                                    <source src="<?php echo htmlspecialchars($current_stream['video_url']); ?>" type="video/mp4">
+                                    Your browser does not support the video tag.
+                                </video>
+                            <?php endif; ?>
+                        </div>
+                        <div class="stream-info">
+                            <?php if ($current_stream['is_live']): ?><span class="live-badge">&#128308; Live</span><?php endif; ?>
+                            <h2 class="stream-title"><?php echo htmlspecialchars($current_stream['title']); ?></h2>
+                            <div class="stream-meta">Streamed by <?php echo htmlspecialchars($current_stream['creator_username']); ?> &bull; <?php echo date('M j, Y g:i A', strtotime($current_stream['created_at'])); ?></div>
+                            <?php if ($current_stream['description']): ?>
+                                <div class="stream-description"><?php echo nl2br(htmlspecialchars($current_stream['description'])); ?></div>
+                            <?php endif; ?>
+                        </div>
+                    <?php else: ?>
+                        <div class="no-stream">
+                            <h2>No Live Stream</h2>
+                            <p>Check back later for upcoming events</p>
+                        </div>
+                    <?php endif; ?>
                 </div>
-            <?php endforeach; ?>
-        </div>
-    </div>
-    
-    <div class="stats-section">
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-number">500+</div>
-                <div class="stat-label">UFC Events</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number">1000+</div>
-                <div class="stat-label">Elite Fighters</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number">50+</div>
-                <div class="stat-label">Countries</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number">24/7</div>
-                <div class="stat-label">Live Coverage</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number">10M+</div>
-                <div class="stat-label">Fans Worldwide</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number">12</div>
-                <div class="stat-label">Weight Classes</div>
+
+                <div class="panel chat-section">
+                    <div class="chat-header">Live Chat</div>
+                    <?php if (!isLoggedIn()): ?>
+                        <div class="login-prompt"><a href="login.php">Login</a> to participate in chat</div>
+                    <?php endif; ?>
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="chat-message">
+                            <div class="username">System</div>
+                            <div class="message">Welcome to the UFC chat! Be respectful and have fun.</div>
+                        </div>
+                    </div>
+                    <?php if (isLoggedIn()): ?>
+                        <div class="chat-input">
+                            <form id="chatForm">
+                                <input type="text" id="messageInput" placeholder="Type a message..." maxlength="500">
+                                <button type="submit">Send</button>
+                            </form>
+                        </div>
+                    <?php endif; ?>
+                </div>
             </div>
         </div>
     </div>
-    
+
     <footer class="footer">
-        <div class="footer-content">
-            <div class="footer-links">
-                <a href="#">Terms of Use</a>
-                <a href="#">Privacy Policy</a>
-                <a href="#">Contact</a>
-                <a href="#">Careers</a>
-            </div>
-            <div class="footer-copyright">
-                © 2024 UFC.SOLUTIONS - All Rights Reserved
-            </div>
+        <div class="footer-links">
+            <a href="#">Terms of Use</a>
+            <a href="#">Privacy Policy</a>
+            <a href="#">Contact</a>
+            <a href="#">Careers</a>
         </div>
+        <div class="footer-copyright">&copy; <?php echo date('Y'); ?> UFC.SOLUTIONS - All Rights Reserved</div>
     </footer>
-    
+
     <script>
-        // General button functionality
-        document.addEventListener('DOMContentLoaded', function() {
-            // Navigation links
-            const navLinks = document.querySelectorAll('.nav-links a');
-            navLinks.forEach(link => {
-                link.addEventListener('click', function(e) {
-                    const href = this.getAttribute('href');
-                    if (href === '#' || href === '') {
-                        e.preventDefault();
-                        // Visual feedback
-                        this.style.color = '#d20a0a';
-                        setTimeout(() => {
-                            this.style.color = '';
-                        }, 300);
-                    }
+        // Fight card segment tabs
+        document.querySelectorAll('.tab').forEach(function (tab) {
+            tab.addEventListener('click', function () {
+                document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
+                this.classList.add('active');
+                var seg = this.getAttribute('data-seg');
+                var shown = 0;
+                document.querySelectorAll('.bout[data-seg]').forEach(function (b) {
+                    var match = b.getAttribute('data-seg') === seg;
+                    b.style.display = match ? '' : 'none';
+                    if (match) shown++;
                 });
+                var box = document.querySelector('.bouts');
+                if (box && !shown) {
+                    // nothing in this segment; show a hint row
+                }
             });
-            
-            // Logo click
-            const logo = document.querySelector('.logo');
-            if (logo) {
-                logo.addEventListener('click', function() {
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                });
-            }
-            
-            // Live button
-            const liveBtn = document.querySelector('.live-btn');
-            if (liveBtn) {
-                liveBtn.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    const videoSection = document.getElementById('video-section');
-                    if (videoSection) {
-                        videoSection.scrollIntoView({ behavior: 'smooth' });
-                    } else {
-                        alert('No live stream available at the moment');
-                    }
-                });
-            }
-            
-            // Watch Live button
-            const watchLiveBtn = document.querySelector('.btn-primary');
-            if (watchLiveBtn) {
-                watchLiveBtn.addEventListener('click', function() {
-                    const videoSection = document.getElementById('video-section');
-                    if (videoSection) {
-                        videoSection.scrollIntoView({ behavior: 'smooth' });
-                    } else {
-                        alert('No live stream available at the moment');
-                    }
-                });
-            }
-            
-            // View Fight Card button
-            const viewFightCardBtn = document.querySelector('.btn-secondary');
-            if (viewFightCardBtn) {
-                viewFightCardBtn.addEventListener('click', function() {
-                    const fightCard = document.querySelector('.sidebar-card');
-                    if (fightCard) {
-                        fightCard.scrollIntoView({ behavior: 'smooth' });
-                    }
-                });
-            }
-            
-            // Featured cards
-            const featuredCards = document.querySelectorAll('.featured-card');
-            featuredCards.forEach(card => {
-                card.addEventListener('click', function() {
-                    const videoSection = document.getElementById('video-section');
-                    if (videoSection) {
-                        videoSection.scrollIntoView({ behavior: 'smooth' });
-                    } else {
-                        alert('Featured fights coming soon!');
-                    }
-                });
-            });
-            
-            // Fight card items
-            const fightCardItems = document.querySelectorAll('.fight-card-item');
-            fightCardItems.forEach(item => {
-                item.addEventListener('click', function() {
-                    this.style.background = 'rgba(210,10,10,0.2)';
-                    setTimeout(() => {
-                        this.style.background = '';
-                    }, 300);
-                });
-            });
-            
-            // Ranking items
-            const rankingItems = document.querySelectorAll('.ranking-item');
-            rankingItems.forEach(item => {
-                item.addEventListener('click', function() {
-                    this.style.background = 'rgba(210,10,10,0.2)';
-                    setTimeout(() => {
-                        this.style.background = '';
-                    }, 300);
-                });
-            });
-            
-            // News items
-            const newsItems = document.querySelectorAll('.news-item');
-            newsItems.forEach(item => {
-                item.addEventListener('click', function() {
-                    this.style.background = 'rgba(210,10,10,0.2)';
-                    setTimeout(() => {
-                        this.style.background = '';
-                    }, 300);
-                });
-            });
-            
-            // Stat cards
-            const statCards = document.querySelectorAll('.stat-card');
-            statCards.forEach(card => {
-                card.addEventListener('click', function() {
-                    this.style.transform = 'scale(1.05)';
-                    setTimeout(() => {
-                        this.style.transform = '';
-                    }, 300);
-                });
-            });
-            
-            // Auto-refresh data every 5 minutes (only if API is available)
-            if (<?php echo $useLiveAPI ? 'true' : 'false'; ?>) {
-                setInterval(function() {
-                    fetch('api/events.php?limit=5')
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.success) {
-                                console.log('Data refreshed successfully');
-                                // Optional: Update DOM elements here
-                            }
-                        })
-                        .catch(error => console.error('Refresh error:', error));
-                }, 300000);
-            }
         });
-        
+
         <?php if ($current_stream): ?>
         // Chat functionality
         const streamId = <?php echo $current_stream_id; ?>;
         const chatMessages = document.getElementById('chatMessages');
         const chatForm = document.getElementById('chatForm');
         const messageInput = document.getElementById('messageInput');
-        
+
         function loadMessages() {
             fetch('get_chat.php?stream_id=' + streamId)
                 .then(response => response.json())
@@ -1290,7 +673,7 @@ if (file_exists('api/ufc_data_fetcher.php')) {
                     });
                 });
         }
-        
+
         function addMessage(username, message, time) {
             const msgDiv = document.createElement('div');
             msgDiv.className = 'chat-message';
@@ -1302,34 +685,34 @@ if (file_exists('api/ufc_data_fetcher.php')) {
             chatMessages.appendChild(msgDiv);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
-        
+
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
         }
-        
-        chatForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            const message = messageInput.value.trim();
-            if (message) {
-                fetch('send_chat.php', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    },
-                    body: 'stream_id=' + streamId + '&message=' + encodeURIComponent(message)
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        messageInput.value = '';
-                        loadMessages();
-                    }
-                });
-            }
-        });
-        
+
+        if (chatForm) {
+            chatForm.addEventListener('submit', function (e) {
+                e.preventDefault();
+                const message = messageInput.value.trim();
+                if (message) {
+                    fetch('send_chat.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: 'stream_id=' + streamId + '&message=' + encodeURIComponent(message)
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            messageInput.value = '';
+                            loadMessages();
+                        }
+                    });
+                }
+            });
+        }
+
         setInterval(loadMessages, 3000);
         loadMessages();
         <?php endif; ?>

@@ -9,6 +9,8 @@
 class UFCDataFetcher {
     private $scoreboardUrl = 'https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard';
     private $newsUrl = 'https://site.api.espn.com/apis/site/v2/sports/mma/ufc/news';
+    private $athleteUrl = 'http://sports.core.api.espn.com/v2/sports/mma/athletes/';
+    private $headshotUrl = 'https://a.espncdn.com/i/headshots/mma/players/full/';
     private $cacheTtl = 600; // seconds
 
     /**
@@ -55,6 +57,7 @@ class UFCDataFetcher {
                     'title' => $article['headline'],
                     'date' => $this->relativeTime($article['published'] ?? null),
                     'link' => $article['links']['web']['href'] ?? null,
+                    'image' => $article['images'][0]['url'] ?? null,
                 ];
                 if (count($news) >= $limit) {
                     break;
@@ -111,23 +114,47 @@ class UFCDataFetcher {
             return null;
         }
 
+        // Split the card into segments to mirror the UFC main card / prelims tabs.
+        foreach ($fightCard as $i => &$bout) {
+            if ($i < 5) {
+                $bout['segment'] = 'main';
+            } elseif ($i < 9) {
+                $bout['segment'] = 'prelims';
+            } else {
+                $bout['segment'] = 'early';
+            }
+        }
+        unset($bout);
+
         $main = $fightCard[0];
         $state = $event['status']['type']['state']
             ?? ($competitions[0]['status']['type']['state'] ?? 'pre');
         $status = $state === 'in' ? 'live' : ($state === 'post' ? 'final' : 'upcoming');
 
+        $venue = $competitions[0]['venue'] ?? null;
+        $venueName = '';
+        if ($venue) {
+            $venueName = $venue['fullName'] ?? '';
+            if (!empty($venue['address']['city'])) {
+                $venueName .= ($venueName ? ', ' : '') . $venue['address']['city'];
+                if (!empty($venue['address']['state'])) {
+                    $venueName .= ', ' . $venue['address']['state'];
+                } elseif (!empty($venue['address']['country'])) {
+                    $venueName .= ', ' . $venue['address']['country'];
+                }
+            }
+        }
+
         return [
             'id' => $event['id'] ?? null,
             'event_name' => $event['name'] ?? 'UFC Event',
             'name' => $event['name'] ?? 'UFC Event',
+            'short_name' => $event['shortName'] ?? ($event['name'] ?? 'UFC'),
             'date' => $event['date'] ?? date('c'),
             'event_date' => $event['date'] ?? date('c'),
+            'venue' => $venueName,
             'status' => $status,
-            'main_event' => [
-                'fighter_a' => $main['fighter_a'],
-                'fighter_b' => $main['fighter_b'],
-                'weight_class' => $main['weight_class'],
-            ],
+            'main_event' => $main,
             'fight_card' => $fightCard,
         ];
     }
@@ -137,14 +164,66 @@ class UFCDataFetcher {
         if (count($competitors) < 2) {
             return null;
         }
+        // ESPN orders competitors red corner (order 1) then blue; keep that order.
+        usort($competitors, function ($a, $b) {
+            return ($a['order'] ?? 99) <=> ($b['order'] ?? 99);
+        });
         return [
             'fighter_a' => $this->fighterName($competitors[0]),
             'fighter_b' => $this->fighterName($competitors[1]),
             'record_a' => $this->fighterRecord($competitors[0]),
             'record_b' => $this->fighterRecord($competitors[1]),
+            'id_a' => $competitors[0]['id'] ?? null,
+            'id_b' => $competitors[1]['id'] ?? null,
+            'photo_a' => $this->headshot($competitors[0]),
+            'photo_b' => $this->headshot($competitors[1]),
+            'flag_a' => $competitors[0]['athlete']['flag']['href'] ?? null,
+            'flag_b' => $competitors[1]['athlete']['flag']['href'] ?? null,
             'weight_class' => $competition['type']['abbreviation']
                 ?? ($competition['type']['text'] ?? ''),
         ];
+    }
+
+    private function headshot($competitor) {
+        $id = $competitor['id'] ?? null;
+        return $id ? ($this->headshotUrl . $id . '.png') : null;
+    }
+
+    /**
+     * Detailed fighter bio (height, reach, weight, age, stance, etc.) used for
+     * the featured-fighter card and the "Tale of the Tape" comparison.
+     */
+    public function getAthlete($id) {
+        if (!$id) {
+            return null;
+        }
+        $json = $this->makeRequest($this->athleteUrl . $id . '?lang=en&region=us');
+        $a = $json ? json_decode($json, true) : null;
+        if (empty($a) || empty($a['fullName'])) {
+            return null;
+        }
+        return [
+            'id' => $id,
+            'name' => $a['displayName'] ?? $a['fullName'],
+            'nickname' => $a['nickname'] ?? '',
+            'photo' => $a['headshot']['href'] ?? ($this->headshotUrl . $id . '.png'),
+            'flag' => $a['flag']['href'] ?? null,
+            'country' => $a['citizenship'] ?? '',
+            'height' => $a['displayHeight'] ?? '',
+            'weight' => $a['displayWeight'] ?? '',
+            'reach' => $a['displayReach'] ?? '',
+            'age' => $a['age'] ?? '',
+            'stance' => $a['stance']['text'] ?? '',
+            'weight_class' => $a['weightClass']['text'] ?? '',
+            'record' => $this->athleteRecord($a),
+        ];
+    }
+
+    private function athleteRecord($a) {
+        if (!empty($a['records']['items'][0]['summary'])) {
+            return $a['records']['items'][0]['summary'];
+        }
+        return '';
     }
 
     private function fighterName($competitor) {

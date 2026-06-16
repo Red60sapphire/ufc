@@ -10,15 +10,40 @@ try {
         $conn = new SQLite3($db_file);
         $conn->enableExceptions(true);
         
-        // Create tables if they don't exist
+        // Create tables if they don't exist. Signup only needs username +
+        // password, so email is optional.
         $conn->exec("CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
-            email TEXT UNIQUE NOT NULL,
+            email TEXT,
             password TEXT NOT NULL,
             is_admin INTEGER DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )");
+
+        // Migration: older installs created `email` as NOT NULL UNIQUE. Since
+        // signup no longer collects an email, relax that constraint in place.
+        $emailNotNull = false;
+        $info = $conn->query("PRAGMA table_info(users)");
+        while ($col = $info->fetchArray(SQLITE3_ASSOC)) {
+            if ($col['name'] === 'email' && (int)$col['notnull'] === 1) {
+                $emailNotNull = true;
+            }
+        }
+        if ($emailNotNull) {
+            $conn->exec("CREATE TABLE users_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                email TEXT,
+                password TEXT NOT NULL,
+                is_admin INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )");
+            $conn->exec("INSERT INTO users_new (id, username, email, password, is_admin, created_at)
+                         SELECT id, username, email, password, is_admin, created_at FROM users");
+            $conn->exec("DROP TABLE users");
+            $conn->exec("ALTER TABLE users_new RENAME TO users");
+        }
         
         $conn->exec("CREATE TABLE IF NOT EXISTS streams (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
