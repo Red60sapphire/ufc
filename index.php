@@ -302,6 +302,28 @@ function tape_val($v) {
         .chat-input button { padding: 10px 16px; background: var(--red); color: #fff; border: none; border-radius: 5px; font-weight: 600; cursor: pointer; }
         .chat-error { color: #ffb3b3; background: rgba(255, 0, 0, 0.08); border: 1px solid rgba(255, 0, 0, 0.2); border-radius: 6px; padding: 10px 12px; margin-bottom: 10px; font-size: 13px; }
 
+        /* Admin chat controls */
+        .chat-message { position: relative; }
+        .chat-message:hover .del-msg { opacity: 1; }
+        .del-msg {
+            opacity: 0; transition: opacity .15s;
+            background: none; border: none; color: var(--red);
+            font-size: 13px; cursor: pointer; padding: 0 4px;
+            position: absolute; right: 0; top: 0;
+        }
+        .admin-clear-bar {
+            display: flex; gap: 8px; padding: 8px 12px;
+            border-bottom: 1px solid var(--line); background: var(--panel-2);
+        }
+        .admin-clear-bar button {
+            font-size: 11px; padding: 5px 10px; border-radius: 4px;
+            border: 1px solid #3a3a42; background: transparent; color: #fff;
+            cursor: pointer; font-family: 'Oswald', sans-serif; letter-spacing: .5px;
+            text-transform: uppercase; transition: background .2s;
+        }
+        .admin-clear-bar button:hover { background: var(--red); border-color: var(--red); }
+        .msg-admin-tag { color: var(--red); font-size: 10px; font-weight: 700; margin-left: 4px; letter-spacing: .5px; }
+
         /* Footer */
         .footer { border-top: 1px solid var(--line); margin-top: 30px; padding: 26px; text-align: center; }
         .footer-links { display: flex; gap: 22px; justify-content: center; margin-bottom: 12px; flex-wrap: wrap; }
@@ -604,33 +626,38 @@ function tape_val($v) {
                 </div>
 
                 <div class="panel chat-section">
-                    <div class="chat-header">Live Chat</div>
-                    <?php if (!$current_stream): ?>
-                        <div class="login-prompt">No live stream is currently active. Chat appears when a stream goes live.</div>
-                    <?php elseif (!isLoggedIn()): ?>
-                        <div class="login-prompt"><a href="login.php">Login</a> to participate in chat</div>
+                    <div class="chat-header">Live Comments</div>
+                    <?php if (isLoggedIn() && isset($_SESSION['is_admin']) && $_SESSION['is_admin']): ?>
+                        <div class="admin-clear-bar">
+                            <button id="btnClearStream">Clear This Stream</button>
+                            <button id="btnClearAll">Clear All</button>
+                        </div>
                     <?php endif; ?>
                     <div class="chat-messages" id="chatMessages">
                         <?php if (!$current_stream): ?>
                             <div class="chat-message">
+                                <div class="username">System</div>
                                 <div class="message">No chat available until a live stream is selected.</div>
                             </div>
                         <?php else: ?>
                             <div class="chat-message">
                                 <div class="username">System</div>
-                                <div class="message">Welcome to the UFC chat! Be respectful and have fun.</div>
+                                <div class="message">Welcome to the UFC stream! Be respectful.</div>
                             </div>
                         <?php endif; ?>
                     </div>
-                    <?php if ($current_stream && isLoggedIn()): ?>
+                    <?php if (!$current_stream): ?>
+                        <div class="login-prompt"><a href="login.php">Login</a> to participate</div>
+                    <?php elseif (!isLoggedIn()): ?>
+                        <div class="login-prompt"><a href="login.php">Login</a> to participate</div>
+                    <?php else: ?>
                         <div class="chat-input">
                             <div id="chatError" class="chat-error" style="display:none"></div>
                             <?php if (!empty($_GET['chat_error'])): ?>
                                 <div class="chat-error" style="display:block"><?php echo htmlspecialchars($_GET['chat_error']); ?></div>
                             <?php endif; ?>
-                            <form id="chatForm" action="post_message.php" method="POST">
+                            <form id="chatForm">
                                 <input type="hidden" name="stream_id" value="<?php echo $current_stream_id; ?>">
-                                <input type="hidden" name="redirect" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
                                 <input type="text" id="messageInput" name="message" placeholder="Type a message..." maxlength="500">
                                 <button type="submit">Send</button>
                             </form>
@@ -672,138 +699,113 @@ function tape_val($v) {
         });
 
         <?php if ($current_stream): ?>
-        // Chat functionality
-        const streamId = <?php echo $current_stream_id; ?>;
-        const chatMessages = document.getElementById('chatMessages');
-        const chatForm = document.getElementById('chatForm');
-        const messageInput = document.getElementById('messageInput');
+        (function () {
+            const streamId   = <?php echo $current_stream_id; ?>;
+            const isAdmin    = <?php echo (isLoggedIn() && isset($_SESSION['is_admin']) && $_SESSION['is_admin']) ? 'true' : 'false'; ?>;
+            const box        = document.getElementById('chatMessages');
+            const form       = document.getElementById('chatForm');
+            const input      = document.getElementById('messageInput');
 
-        function loadMessages() {
-            const xhr = new XMLHttpRequest();
-            xhr.open('GET', 'api.php?action=get_messages&stream_id=' + streamId, true);
-            xhr.withCredentials = true;
-            xhr.setRequestHeader('Accept', 'application/json');
-            xhr.onreadystatechange = function () {
-                if (xhr.readyState !== XMLHttpRequest.DONE) return;
-                if (xhr.status === 200) {
-                    try {
-                        const data = JSON.parse(xhr.responseText);
-                        chatMessages.innerHTML = '';
-                        data.messages.forEach(msg => {
-                            addMessage(msg.username, msg.message, msg.time);
-                        });
-                    } catch (err) {
-                        console.error('Failed to parse get_messages response:', xhr.responseText);
-                    }
-                } else {
-                    console.error('Chat load HTTP error:', xhr.status, xhr.responseText);
-                }
-            };
-            xhr.send();
-        }
-
-        function addMessage(username, message, time) {
-            const msgDiv = document.createElement('div');
-            msgDiv.className = 'chat-message';
-            msgDiv.innerHTML = `
-                <div class="username">${escapeHtml(username)}</div>
-                <div class="message">${escapeHtml(message)}</div>
-                <div class="time">${time}</div>
-            `;
-            chatMessages.appendChild(msgDiv);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
-
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        if (chatForm) {
-            const chatError = document.getElementById('chatError');
-
-            function showChatError(text) {
-                if (!chatError) return;
-                chatError.textContent = text;
-                chatError.style.display = text ? 'block' : 'none';
+            function esc(t) {
+                const d = document.createElement('div');
+                d.textContent = t;
+                return d.innerHTML;
             }
 
-            function handleSendChatResponse(text) {
-                console.log('handleSendChatResponse received:', text);
-                try {
-                    const data = JSON.parse(text);
-                    if (data.success) {
-                        messageInput.value = '';
-                        loadMessages();
-                    } else {
-                        console.error('send_chat error response:', data);
-                        showChatError(data.error || 'Unable to send message');
-                    }
-                } catch (err) {
-                    console.error('send_chat parse error:', text, 'error:', err);
-                    showChatError('Unable to send message. Server returned invalid response.');
-                }
+            function buildMessage(msg) {
+                const wrap = document.createElement('div');
+                wrap.className = 'chat-message';
+                wrap.dataset.id = msg.id;
+                const adminTag = msg.is_admin ? '<span class="msg-admin-tag">MOD</span>' : '';
+                wrap.innerHTML = `
+                    <div class="username">${esc(msg.username)}${adminTag}
+                        ${isAdmin ? `<button class="del-msg" data-id="${msg.id}">✕</button>` : ''}
+                    </div>
+                    <div class="message">${esc(msg.message)}</div>
+                    <div class="time">${esc(msg.time)}</div>
+                `;
+                return wrap;
             }
 
-            chatForm.addEventListener('submit', function (e) {
-                e.preventDefault();
-                const message = messageInput.value.trim();
-                showChatError('');
-                if (!message) {
-                    showChatError('Message cannot be empty');
-                    return;
-                }
-                const formData = new FormData();
-                formData.append('action', 'send_message');
-                formData.append('stream_id', streamId);
-                formData.append('message', message);
-                
-                console.log('Attempting to send chat message via api.php');
-                
-                // Add a timeout to fall back to form submission if fetch hangs
-                let fetchCompleted = false;
-                const fetchTimeout = setTimeout(function() {
-                    if (!fetchCompleted) {
-                        console.warn('Fetch timeout, retrying...');
-                    }
-                }, 10000);
-                
-                fetch('api.php', {
-                    method: 'POST',
-                    body: formData,
-                    headers: {
-                        'Accept': 'application/json'
-                    },
-                    credentials: 'same-origin'
-                }).then(function (response) {
-                    fetchCompleted = true;
-                    clearTimeout(fetchTimeout);
-                    return response.text().then(function (text) {
-                        console.log('fetch response status:', response.status, 'ok:', response.ok);
-                        console.log('fetch response text:', text.substring(0, 200));
-                        if (!response.ok) {
-                            console.error('send_message HTTP error:', response.status, text);
-                            if (response.status === 401) {
-                                showChatError('Not logged in. Please refresh and login again.');
-                            } else {
-                                showChatError('Server error: ' + response.status);
-                            }
+            let lastCount = 0;
+
+            function loadMessages() {
+                fetch('get_messages.php?stream_id=' + streamId)
+                    .then(r => r.json())
+                    .then(data => {
+                        const msgs = data.messages || [];
+                        if (msgs.length === lastCount) return;
+                        lastCount = msgs.length;
+                        box.innerHTML = '';
+                        if (msgs.length === 0) {
+                            box.innerHTML = '<div class="chat-message"><div class="username">System</div><div class="message">No messages yet.</div></div>';
                             return;
                         }
-                        handleSendChatResponse(text);
-                    });
-                }).catch(function (err) {
-                    fetchCompleted = true;
-                    clearTimeout(fetchTimeout);
-                    console.error('send_message fetch error:', err);
-                    showChatError('Network error. Please try again.');
-                });
-            });
-        }
+                        msgs.forEach(m => box.appendChild(buildMessage(m)));
+                        box.scrollTop = box.scrollHeight;
+                    })
+                    .catch(() => {});
+            }
 
-        setInterval(loadMessages, 3000);
-        loadMessages();
+            setInterval(loadMessages, 3000);
+            loadMessages();
+
+            if (form) {
+                form.addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    const msg = input.value.trim();
+                    if (!msg) return;
+                    fetch('post_message.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: 'stream_id=' + streamId + '&message=' + encodeURIComponent(msg)
+                    })
+                    .then(r => r.json())
+                    .then(d => { if (d.success) { input.value = ''; loadMessages(); } });
+                });
+            }
+
+            box.addEventListener('click', function (e) {
+                const btn = e.target.closest('.del-msg');
+                if (!btn || !isAdmin) return;
+                if (!confirm('Delete this message?')) return;
+                fetch('delete_messages.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'action=delete_one&message_id=' + btn.dataset.id
+                })
+                .then(r => r.json())
+                .then(d => { if (d.success) { lastCount = -1; loadMessages(); } });
+            });
+
+            const btnClearStream = document.getElementById('btnClearStream');
+            if (btnClearStream) {
+                btnClearStream.addEventListener('click', function () {
+                    if (!confirm('Clear ALL messages for this stream?')) return;
+                    fetch('delete_messages.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: 'action=clear_stream&stream_id=' + streamId
+                    })
+                    .then(r => r.json())
+                    .then(d => { if (d.success) { lastCount = -1; loadMessages(); } });
+                });
+            }
+
+            const btnClearAll = document.getElementById('btnClearAll');
+            if (btnClearAll) {
+                btnClearAll.addEventListener('click', function () {
+                    if (!confirm('Clear ALL messages across every stream? This cannot be undone.')) return;
+                    fetch('delete_messages.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: 'action=clear_all'
+                    })
+                    .then(r => r.json())
+                    .then(d => { if (d.success) { lastCount = -1; loadMessages(); } });
+                });
+            }
+        })();
         <?php endif; ?>
     </script>
 </body>
