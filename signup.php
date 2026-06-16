@@ -24,10 +24,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $check_query = "SELECT id FROM users WHERE username = ? OR email = ?";
         $stmt = db_prepare($conn, $check_query);
         db_execute($stmt, [$username, $email]);
-        $result = $stmt->execute();
-        
+
         if ($conn instanceof SQLite3) {
             $result = $stmt;
+        } else {
+            $result = $stmt->get_result();
         }
         
         if (db_num_rows($result) > 0) {

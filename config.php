@@ -90,31 +90,25 @@ function db_prepare($conn, $query) {
 function db_execute($stmt, $params = []) {
     if ($stmt instanceof SQLite3Stmt) {
         if (!empty($params)) {
-            $types = '';
-            $bind_names = [];
-            foreach ($params as $i => $param) {
-                $bind_name = ':param' . $i;
-                $bind_names[] = $bind_name;
+            $i = 1;
+            foreach ($params as $param) {
                 if (is_int($param)) {
-                    $types .= 'i';
+                    $type = SQLITE3_INTEGER;
                 } elseif (is_float($param)) {
-                    $types .= 'd';
+                    $type = SQLITE3_FLOAT;
+                } elseif (is_null($param)) {
+                    $type = SQLITE3_NULL;
                 } else {
-                    $types .= 's';
+                    $type = SQLITE3_TEXT;
                 }
-                $stmt->bindValue($bind_name, $param);
-            }
-            // Replace ? with :param0, :param1, etc.
-            $query = $stmt->getSQL(true);
-            foreach ($bind_names as $i => $name) {
-                $query = preg_replace('/\?/', $name, $query, 1);
-            }
-            $stmt = $conn->prepare($query);
-            foreach ($bind_names as $i => $name) {
-                $stmt->bindValue($name, $params[$i]);
+                $stmt->bindValue($i, $param, $type);
+                $i++;
             }
         }
         $result = $stmt->execute();
+        // Remember the result so the helpers below can be called with the
+        // statement object (the convention used throughout the callers).
+        $GLOBALS['__sqlite_stmt_results'][spl_object_id($stmt)] = $result;
         return $result;
     } else {
         if (!empty($params)) {
@@ -134,7 +128,22 @@ function db_execute($stmt, $params = []) {
     }
 }
 
+// Resolve a SQLite3Stmt to its most recent SQLite3Result. Callers throughout
+// the app pass the statement object where a result is expected, so map it back
+// to the result produced by db_execute().
+function db_sqlite_result($result) {
+    if ($result instanceof SQLite3Stmt) {
+        $id = spl_object_id($result);
+        if (isset($GLOBALS['__sqlite_stmt_results'][$id])) {
+            return $GLOBALS['__sqlite_stmt_results'][$id];
+        }
+        return $result->execute();
+    }
+    return $result;
+}
+
 function db_fetch_all($stmt) {
+    $stmt = db_sqlite_result($stmt);
     if ($stmt instanceof SQLite3Result) {
         $results = [];
         while ($row = $stmt->fetchArray(SQLITE3_ASSOC)) {
@@ -158,10 +167,11 @@ function db_query($conn, $query) {
 }
 
 function db_num_rows($result) {
+    $result = db_sqlite_result($result);
     if ($result instanceof SQLite3Result) {
         // SQLite doesn't have num_rows, need to count
         $count = 0;
-        while ($result->fetchArray()) {
+        while ($result->fetchArray(SQLITE3_NUM)) {
             $count++;
         }
         $result->reset();
@@ -171,6 +181,7 @@ function db_num_rows($result) {
 }
 
 function db_fetch_assoc($result) {
+    $result = db_sqlite_result($result);
     if ($result instanceof SQLite3Result) {
         return $result->fetchArray(SQLITE3_ASSOC);
     }

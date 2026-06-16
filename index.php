@@ -7,7 +7,7 @@ if (file_exists('api/ufc_data_fetcher.php')) {
     try {
         require_once 'api/ufc_data_fetcher.php';
         $useLiveAPI = true;
-    } catch (Exception $e) {
+    } catch (\Throwable $e) {
         $useLiveAPI = false;
         error_log("Failed to load UFC API: " . $e->getMessage());
     }
@@ -84,7 +84,7 @@ if ($useLiveAPI) {
             }
         }
         
-    } catch (Exception $e) {
+    } catch (\Throwable $e) {
         // Fallback to config file if API fails
         error_log("UFC API Error: " . $e->getMessage());
         $useLiveAPI = false;
