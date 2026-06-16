@@ -300,6 +300,7 @@ function tape_val($v) {
         .chat-input input { flex: 1; padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px; color: #fff; }
         .chat-input input:focus { outline: none; border-color: var(--red); }
         .chat-input button { padding: 10px 16px; background: var(--red); color: #fff; border: none; border-radius: 5px; font-weight: 600; cursor: pointer; }
+        .chat-error { color: #ffb3b3; background: rgba(255, 0, 0, 0.08); border: 1px solid rgba(255, 0, 0, 0.2); border-radius: 6px; padding: 10px 12px; margin-bottom: 10px; font-size: 13px; }
 
         /* Footer */
         .footer { border-top: 1px solid var(--line); margin-top: 30px; padding: 26px; text-align: center; }
@@ -604,19 +605,33 @@ function tape_val($v) {
 
                 <div class="panel chat-section">
                     <div class="chat-header">Live Chat</div>
-                    <?php if (!isLoggedIn()): ?>
+                    <?php if (!$current_stream): ?>
+                        <div class="login-prompt">No live stream is currently active. Chat appears when a stream goes live.</div>
+                    <?php elseif (!isLoggedIn()): ?>
                         <div class="login-prompt"><a href="login.php">Login</a> to participate in chat</div>
                     <?php endif; ?>
                     <div class="chat-messages" id="chatMessages">
-                        <div class="chat-message">
-                            <div class="username">System</div>
-                            <div class="message">Welcome to the UFC chat! Be respectful and have fun.</div>
-                        </div>
+                        <?php if (!$current_stream): ?>
+                            <div class="chat-message">
+                                <div class="message">No chat available until a live stream is selected.</div>
+                            </div>
+                        <?php else: ?>
+                            <div class="chat-message">
+                                <div class="username">System</div>
+                                <div class="message">Welcome to the UFC chat! Be respectful and have fun.</div>
+                            </div>
+                        <?php endif; ?>
                     </div>
-                    <?php if (isLoggedIn()): ?>
+                    <?php if ($current_stream && isLoggedIn()): ?>
                         <div class="chat-input">
-                            <form id="chatForm">
-                                <input type="text" id="messageInput" placeholder="Type a message..." maxlength="500">
+                            <div id="chatError" class="chat-error" style="display:none"></div>
+                            <?php if (!empty($_GET['chat_error'])): ?>
+                                <div class="chat-error" style="display:block"><?php echo htmlspecialchars($_GET['chat_error']); ?></div>
+                            <?php endif; ?>
+                            <form id="chatForm" action="post_message.php" method="POST">
+                                <input type="hidden" name="stream_id" value="<?php echo $current_stream_id; ?>">
+                                <input type="hidden" name="redirect" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
+                                <input type="text" id="messageInput" name="message" placeholder="Type a message..." maxlength="500">
                                 <button type="submit">Send</button>
                             </form>
                         </div>
@@ -664,14 +679,27 @@ function tape_val($v) {
         const messageInput = document.getElementById('messageInput');
 
         function loadMessages() {
-            fetch('get_chat.php?stream_id=' + streamId)
-                .then(response => response.json())
-                .then(data => {
-                    chatMessages.innerHTML = '';
-                    data.messages.forEach(msg => {
-                        addMessage(msg.username, msg.message, msg.time);
-                    });
-                });
+            const xhr = new XMLHttpRequest();
+            xhr.open('GET', 'api.php?action=get_messages&stream_id=' + streamId, true);
+            xhr.withCredentials = true;
+            xhr.setRequestHeader('Accept', 'application/json');
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState !== XMLHttpRequest.DONE) return;
+                if (xhr.status === 200) {
+                    try {
+                        const data = JSON.parse(xhr.responseText);
+                        chatMessages.innerHTML = '';
+                        data.messages.forEach(msg => {
+                            addMessage(msg.username, msg.message, msg.time);
+                        });
+                    } catch (err) {
+                        console.error('Failed to parse get_messages response:', xhr.responseText);
+                    }
+                } else {
+                    console.error('Chat load HTTP error:', xhr.status, xhr.responseText);
+                }
+            };
+            xhr.send();
         }
 
         function addMessage(username, message, time) {
@@ -693,23 +721,84 @@ function tape_val($v) {
         }
 
         if (chatForm) {
+            const chatError = document.getElementById('chatError');
+
+            function showChatError(text) {
+                if (!chatError) return;
+                chatError.textContent = text;
+                chatError.style.display = text ? 'block' : 'none';
+            }
+
+            function handleSendChatResponse(text) {
+                console.log('handleSendChatResponse received:', text);
+                try {
+                    const data = JSON.parse(text);
+                    if (data.success) {
+                        messageInput.value = '';
+                        loadMessages();
+                    } else {
+                        console.error('send_chat error response:', data);
+                        showChatError(data.error || 'Unable to send message');
+                    }
+                } catch (err) {
+                    console.error('send_chat parse error:', text, 'error:', err);
+                    showChatError('Unable to send message. Server returned invalid response.');
+                }
+            }
+
             chatForm.addEventListener('submit', function (e) {
                 e.preventDefault();
                 const message = messageInput.value.trim();
-                if (message) {
-                    fetch('send_chat.php', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: 'stream_id=' + streamId + '&message=' + encodeURIComponent(message)
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            messageInput.value = '';
-                            loadMessages();
-                        }
-                    });
+                showChatError('');
+                if (!message) {
+                    showChatError('Message cannot be empty');
+                    return;
                 }
+                const formData = new FormData();
+                formData.append('action', 'send_message');
+                formData.append('stream_id', streamId);
+                formData.append('message', message);
+                
+                console.log('Attempting to send chat message via api.php');
+                
+                // Add a timeout to fall back to form submission if fetch hangs
+                let fetchCompleted = false;
+                const fetchTimeout = setTimeout(function() {
+                    if (!fetchCompleted) {
+                        console.warn('Fetch timeout, retrying...');
+                    }
+                }, 10000);
+                
+                fetch('api.php', {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'Accept': 'application/json'
+                    },
+                    credentials: 'same-origin'
+                }).then(function (response) {
+                    fetchCompleted = true;
+                    clearTimeout(fetchTimeout);
+                    return response.text().then(function (text) {
+                        console.log('fetch response status:', response.status, 'ok:', response.ok);
+                        console.log('fetch response text:', text.substring(0, 200));
+                        if (!response.ok) {
+                            console.error('send_message HTTP error:', response.status, text);
+                            if (response.status === 401) {
+                                showChatError('Not logged in. Please refresh and login again.');
+                            } else {
+                                showChatError('Server error: ' + response.status);
+                            }
+                            return;
+                        }
+                        handleSendChatResponse(text);
+                    });
+                }).catch(function (err) {
+                    fetchCompleted = true;
+                    clearTimeout(fetchTimeout);
+                    console.error('send_message fetch error:', err);
+                    showChatError('Network error. Please try again.');
+                });
             });
         }
 

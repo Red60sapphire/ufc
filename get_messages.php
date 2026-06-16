@@ -20,14 +20,8 @@ $query = "SELECT cm.*, u.username
 $stmt = db_prepare($conn, $query);
 db_execute($stmt, [$stream_id]);
 
-if ($conn instanceof SQLite3) {
-    $result = $stmt;
-} else {
-    $result = $stmt->get_result();
-}
-
 $messages = [];
-while ($row = db_fetch_assoc($result)) {
+while ($row = db_fetch_assoc($stmt)) {
     $messages[] = [
         'username' => $row['username'],
         'message' => $row['message'],
