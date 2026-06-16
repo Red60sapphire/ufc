@@ -1,22 +1,14 @@
 <?php
 require_once 'config.php';
 
-// Try to load UFC data fetcher, fall back to config if it fails
-$useLiveAPI = false;
-if (file_exists('api/ufc_data_fetcher.php')) {
-    try {
-        require_once 'api/ufc_data_fetcher.php';
-        $useLiveAPI = true;
-    } catch (\Throwable $e) {
-        $useLiveAPI = false;
-        error_log("Failed to load UFC API: " . $e->getMessage());
-    }
-}
+// Curated UFC data acts as the always-available baseline / fallback so the page
+// is never blank, even when the live API is unreachable.
+$ufc_config = file_exists('ufc_config.php') ? require 'ufc_config.php' : null;
 
-// Fall back to config file
-if (!$useLiveAPI && file_exists('ufc_config.php')) {
-    $ufc_config = require 'ufc_config.php';
-}
+$ufc_events = (isset($ufc_config['current_event'])) ? [$ufc_config['current_event']] : [];
+$ufc_rankings = $ufc_config['rankings'] ?? [];
+$ufc_news = $ufc_config['news'] ?? [];
+$featured_fights = $ufc_config['featured_fights'] ?? [];
 
 // Get current stream ID from URL or default to latest live stream
 $current_stream_id = isset($_GET['stream']) ? intval($_GET['stream']) : null;
@@ -57,103 +49,45 @@ if ($current_stream_id) {
     }
 }
 
-// Load UFC data - try live API first, fall back to config, then database
-if ($useLiveAPI) {
+// Overlay live data from the ESPN-backed fetcher on top of the curated baseline.
+// Any section the live API can't provide keeps its curated value, so the page
+// always renders real content.
+if (file_exists('api/ufc_data_fetcher.php')) {
     try {
+        require_once 'api/ufc_data_fetcher.php';
         $fetcher = new UFCDataFetcher();
-        
-        // Get upcoming events
-        $ufc_events = $fetcher->getUpcomingEvents(5);
-        
-        // Get rankings (default to lightweight)
-        $ufc_rankings = $fetcher->getRankings('lightweight');
-        
-        // Get latest news
-        $ufc_news = $fetcher->getLatestNews(5);
-        
-        // Create featured fights from events
-        $featured_fights = [];
-        if (!empty($ufc_events)) {
-            foreach (array_slice($ufc_events, 0, 4) as $event) {
+
+        $liveEvents = $fetcher->getUpcomingEvents(5);
+        if (!empty($liveEvents)) {
+            $ufc_events = $liveEvents;
+
+            // Build the "Featured Fights" cards from the live events.
+            $featured_fights = [];
+            foreach (array_slice($liveEvents, 0, 4) as $event) {
                 $featured_fights[] = [
                     'name' => $event['event_name'] ?? 'UFC Event',
-                    'fighters' => 'Main Event',
-                    'status' => isset($event['status']) && $event['status'] === 'live' ? 'LIVE NOW' : 'UPCOMING',
-                    'date' => isset($event['event_date']) ? date('F j, Y', strtotime($event['event_date'])) : 'TBD'
+                    'fighters' => isset($event['main_event'])
+                        ? $event['main_event']['fighter_a'] . ' vs ' . $event['main_event']['fighter_b']
+                        : 'Main Event',
+                    'status' => (($event['status'] ?? '') === 'live') ? 'LIVE NOW' : 'UPCOMING',
+                    'date' => isset($event['event_date']) ? date('F j, Y', strtotime($event['event_date'])) : 'TBD',
                 ];
             }
         }
-        
-    } catch (\Throwable $e) {
-        // Fallback to config file if API fails
-        error_log("UFC API Error: " . $e->getMessage());
-        $useLiveAPI = false;
-    }
-}
 
-// Fallback to config file or database
-if (!$useLiveAPI) {
-    if (isset($ufc_config)) {
-        // Use config file
-        $ufc_events = [$ufc_config['current_event']];
-        $ufc_rankings = $ufc_config['rankings'];
-        $ufc_news = $ufc_config['news'];
-        $featured_fights = $ufc_config['featured_fights'];
-    } else {
-        // Final fallback to database if tables exist
-        try {
-            // Check if UFC tables exist first
-            $tablesExist = false;
-            if ($conn instanceof SQLite3) {
-                $result = $conn->query("SELECT name FROM sqlite_master WHERE type='table' AND name='ufc_events'");
-                $tablesExist = $result->fetchArray() !== false;
-            } else {
-                $result = $conn->query("SHOW TABLES LIKE 'ufc_events'");
-                $tablesExist = $result->num_rows > 0;
-            }
-            
-            if ($tablesExist) {
-                $stmt = db_prepare($conn, "SELECT * FROM ufc_events WHERE event_date >= CURDATE() ORDER BY event_date ASC LIMIT 5");
-                db_execute($stmt);
-                $ufc_events = [];
-                while ($row = db_fetch_assoc($stmt)) {
-                    $ufc_events[] = $row;
-                }
-                
-                $stmt = db_prepare($conn, "
-                    SELECT r.*, f.first_name, f.last_name, f.record_wins, f.record_losses, f.record_draws
-                    FROM ufc_rankings r
-                    JOIN ufc_fighters f ON r.fighter_id = f.id
-                    WHERE r.weight_class = 'lightweight' AND r.ranking_date = (SELECT MAX(ranking_date) FROM ufc_rankings WHERE weight_class = 'lightweight')
-                    ORDER BY r.rank_position ASC
-                ");
-                db_execute($stmt);
-                $ufc_rankings = [];
-                while ($row = db_fetch_assoc($stmt)) {
-                    $ufc_rankings[] = $row;
-                }
-                
-                $stmt = db_prepare($conn, "SELECT * FROM ufc_news ORDER BY published_at DESC LIMIT 5");
-                db_execute($stmt);
-                $ufc_news = [];
-                while ($row = db_fetch_assoc($stmt)) {
-                    $ufc_news[] = $row;
-                }
-                
-                // Create fallback featured fights
-                $featured_fights = [
-                    ['name' => 'UFC Event', 'fighters' => 'Coming Soon', 'status' => 'UPCOMING', 'date' => 'TBD']
-                ];
-            } else {
-                throw new Exception("UFC tables don't exist yet");
-            }
-        } catch (Exception $e) {
-            // Ultimate fallback - use hardcoded data
-            $ufc_events = [['event_name' => 'UFC Event', 'date' => date('F j, Y')]];
-            $ufc_rankings = [];
-            $ufc_news = [];
-            $featured_fights = [['name' => 'UFC Event', 'fighters' => 'Coming Soon', 'status' => 'UPCOMING', 'date' => 'TBD']];
+        $liveNews = $fetcher->getLatestNews(5);
+        if (!empty($liveNews)) {
+            $ufc_news = $liveNews;
         }
+
+        // ESPN has no rankings endpoint; getRankings() returns [] and rankings
+        // stay sourced from the curated config above.
+        $liveRankings = $fetcher->getRankings('lightweight');
+        if (!empty($liveRankings)) {
+            $ufc_rankings = $liveRankings;
+        }
+    } catch (\Throwable $e) {
+        error_log("UFC live data unavailable, using curated config: " . $e->getMessage());
     }
 }
 ?>
@@ -909,7 +843,7 @@ if (!$useLiveAPI) {
                 <div class="fight-banner">
                     <?php if (!empty($ufc_events) && isset($ufc_events[0])): ?>
                         <?php $main_event = $ufc_events[0]; ?>
-                        <h2><?php echo htmlspecialchars($main_event['event_name']); ?></h2>
+                        <h2><?php echo htmlspecialchars($main_event['event_name'] ?? ($main_event['name'] ?? 'UFC Event')); ?></h2>
                         <div class="subtitle">
                             <?php
                             if (isset($main_event['main_event'])) {
@@ -979,7 +913,7 @@ if (!$useLiveAPI) {
                 </div>
                 
                 <div class="sidebar-card">
-                    <h3>Rankings - Lightweight</h3>
+                    <h3>Rankings<?php echo !empty($ufc_rankings[0]['weight_class']) ? ' - ' . htmlspecialchars($ufc_rankings[0]['weight_class']) : ''; ?></h3>
                     <?php if (!empty($ufc_rankings)): ?>
                         <?php foreach ($ufc_rankings as $index => $fighter): ?>
                             <div class="ranking-item">

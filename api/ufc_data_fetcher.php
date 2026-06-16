@@ -1,507 +1,263 @@
 <?php
-// UFC Data Fetcher - Live API Integration
-// Uses multiple reliable UFC data sources with fallback
+// UFC live data fetcher backed by ESPN's public MMA API.
+//
+// No API key is required. Requests use cURL when available and fall back to
+// file_get_contents() (allow_url_fopen) so the site works on hosts without the
+// PHP cURL extension. Responses are cached briefly on disk to keep page loads
+// fast and to survive transient ESPN outages.
 
 class UFCDataFetcher {
-    private $cache;
-    private $cacheExpiry = 3600; // 1 hour cache
-    
-    public function __construct() {
-        try {
-            $this->cache = new UFCCache();
-        } catch (Exception $e) {
-            // Cache table doesn't exist yet, disable caching
-            $this->cache = null;
-            error_log("UFC Cache disabled: " . $e->getMessage());
-        }
-    }
-    
+    private $scoreboardUrl = 'https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard';
+    private $newsUrl = 'https://site.api.espn.com/apis/site/v2/sports/mma/ufc/news';
+    private $cacheTtl = 600; // seconds
+
     /**
-     * Get upcoming UFC events
+     * Upcoming UFC events with their full fight cards.
      */
     public function getUpcomingEvents($limit = 10) {
-        $cacheKey = 'upcoming_events_' . $limit;
-        
-        if ($this->cache) {
-            $cached = $this->cache->get($cacheKey);
-            if ($cached !== false) {
-                return $cached;
-            }
+        $start = date('Ymd');
+        $end = date('Ymd', strtotime('+120 days'));
+        $events = $this->parseEvents($this->scoreboardUrl . '?dates=' . $start . '-' . $end, $limit);
+
+        // If the upcoming window is empty, fall back to the default scoreboard
+        // (the current or most recent event).
+        if (empty($events)) {
+            $events = $this->parseEvents($this->scoreboardUrl, $limit);
         }
-        
-        // Try multiple data sources
-        $data = $this->fetchFromUFCStats($limit);
-        
-        if (empty($data)) {
-            $data = $this->fetchFromSherdog($limit);
-        }
-        
-        if (empty($data)) {
-            $data = $this->fetchFromTapology($limit);
-        }
-        
-        if (!empty($data)) {
-            if ($this->cache) {
-                $this->cache->set($cacheKey, $data, $this->cacheExpiry);
-            }
-            $this->saveEventsToDatabase($data);
-        }
-        
-        return $data;
+        return $events;
     }
-    
+
     /**
-     * Get fight card for specific event
+     * Fight card for a single event id.
      */
     public function getFightCard($eventId) {
-        $cacheKey = 'fight_card_' . $eventId;
-        
-        if ($this->cache) {
-            $cached = $this->cache->get($cacheKey);
-            if ($cached !== false) {
-                return $cached;
+        foreach ($this->getUpcomingEvents(25) as $event) {
+            if ((string)($event['id'] ?? '') === (string)$eventId) {
+                return $event['fight_card'] ?? [];
             }
         }
-        
-        $data = $this->fetchFightCardFromUFCStats($eventId);
-        
-        if (!empty($data)) {
-            if ($this->cache) {
-                $this->cache->set($cacheKey, $data, $this->cacheExpiry);
-            }
-            $this->saveFightCardToDatabase($eventId, $data);
-        }
-        
-        return $data;
+        return [];
     }
-    
+
     /**
-     * Get rankings for specific weight class
-     */
-    public function getRankings($weightClass = 'pound-for-pound') {
-        $cacheKey = 'rankings_' . $weightClass;
-        
-        if ($this->cache) {
-            $cached = $this->cache->get($cacheKey);
-            if ($cached !== false) {
-                return $cached;
-            }
-        }
-        
-        $data = $this->fetchRankingsFromUFCStats($weightClass);
-        
-        if (!empty($data)) {
-            if ($this->cache) {
-                $this->cache->set($cacheKey, $data, $this->cacheExpiry);
-            }
-            $this->saveRankingsToDatabase($weightClass, $data);
-        }
-        
-        return $data;
-    }
-    
-    /**
-     * Get fighter profile
-     */
-    public function getFighterProfile($fighterId) {
-        $cacheKey = 'fighter_' . $fighterId;
-        
-        if ($this->cache) {
-            $cached = $this->cache->get($cacheKey);
-            if ($cached !== false) {
-                return $cached;
-            }
-        }
-        
-        $data = $this->fetchFighterFromUFCStats($fighterId);
-        
-        if (!empty($data)) {
-            if ($this->cache) {
-                $this->cache->set($cacheKey, $data, $this->cacheExpiry);
-            }
-            $this->saveFighterToDatabase($data);
-        }
-        
-        return $data;
-    }
-    
-    /**
-     * Get latest UFC news
+     * Latest MMA/UFC news headlines.
      */
     public function getLatestNews($limit = 10) {
-        $cacheKey = 'latest_news_' . $limit;
-        
-        if ($this->cache) {
-            $cached = $this->cache->get($cacheKey);
-            if ($cached !== false) {
+        $json = $this->makeRequest($this->newsUrl);
+        $data = $json ? json_decode($json, true) : null;
+        $news = [];
+        if (!empty($data['articles'])) {
+            foreach ($data['articles'] as $article) {
+                if (empty($article['headline'])) {
+                    continue;
+                }
+                $news[] = [
+                    'title' => $article['headline'],
+                    'date' => $this->relativeTime($article['published'] ?? null),
+                    'link' => $article['links']['web']['href'] ?? null,
+                ];
+                if (count($news) >= $limit) {
+                    break;
+                }
+            }
+        }
+        return $news;
+    }
+
+    /**
+     * ESPN does not expose official UFC rankings through this API, so rankings
+     * remain curated in ufc_config.php. Returning an empty array lets the caller
+     * fall back to that curated data.
+     */
+    public function getRankings($weightClass = 'lightweight') {
+        return [];
+    }
+
+    // ------------------------------------------------------------------ helpers
+
+    private function parseEvents($url, $limit) {
+        $json = $this->makeRequest($url);
+        $data = $json ? json_decode($json, true) : null;
+        $events = [];
+        if (!empty($data['events'])) {
+            foreach ($data['events'] as $event) {
+                $parsed = $this->parseEvent($event);
+                if ($parsed) {
+                    $events[] = $parsed;
+                }
+                if (count($events) >= $limit) {
+                    break;
+                }
+            }
+        }
+        return $events;
+    }
+
+    private function parseEvent($event) {
+        $competitions = $event['competitions'] ?? [];
+        if (empty($competitions)) {
+            return null;
+        }
+
+        // ESPN lists the main event last; present the card main-event first.
+        $fightCard = [];
+        foreach (array_reverse($competitions) as $competition) {
+            $fight = $this->parseCompetition($competition);
+            if ($fight) {
+                $fightCard[] = $fight;
+            }
+        }
+        if (empty($fightCard)) {
+            return null;
+        }
+
+        $main = $fightCard[0];
+        $state = $event['status']['type']['state']
+            ?? ($competitions[0]['status']['type']['state'] ?? 'pre');
+        $status = $state === 'in' ? 'live' : ($state === 'post' ? 'final' : 'upcoming');
+
+        return [
+            'id' => $event['id'] ?? null,
+            'event_name' => $event['name'] ?? 'UFC Event',
+            'name' => $event['name'] ?? 'UFC Event',
+            'date' => $event['date'] ?? date('c'),
+            'event_date' => $event['date'] ?? date('c'),
+            'status' => $status,
+            'main_event' => [
+                'fighter_a' => $main['fighter_a'],
+                'fighter_b' => $main['fighter_b'],
+                'weight_class' => $main['weight_class'],
+            ],
+            'fight_card' => $fightCard,
+        ];
+    }
+
+    private function parseCompetition($competition) {
+        $competitors = $competition['competitors'] ?? [];
+        if (count($competitors) < 2) {
+            return null;
+        }
+        return [
+            'fighter_a' => $this->fighterName($competitors[0]),
+            'fighter_b' => $this->fighterName($competitors[1]),
+            'record_a' => $this->fighterRecord($competitors[0]),
+            'record_b' => $this->fighterRecord($competitors[1]),
+            'weight_class' => $competition['type']['abbreviation']
+                ?? ($competition['type']['text'] ?? ''),
+        ];
+    }
+
+    private function fighterName($competitor) {
+        return $competitor['athlete']['displayName']
+            ?? ($competitor['athlete']['fullName'] ?? 'TBD');
+    }
+
+    private function fighterRecord($competitor) {
+        if (!empty($competitor['records'][0]['summary'])) {
+            return $competitor['records'][0]['summary'];
+        }
+        if (!empty($competitor['athlete']['record'])) {
+            return $competitor['athlete']['record'];
+        }
+        return '';
+    }
+
+    private function relativeTime($iso) {
+        if (!$iso) {
+            return 'Recently';
+        }
+        $ts = strtotime($iso);
+        if (!$ts) {
+            return 'Recently';
+        }
+        $diff = time() - $ts;
+        if ($diff < 0) {
+            return date('M j, Y', $ts);
+        }
+        if ($diff < 60) {
+            return 'Just now';
+        }
+        if ($diff < 3600) {
+            $m = (int)floor($diff / 60);
+            return $m . ' minute' . ($m === 1 ? '' : 's') . ' ago';
+        }
+        if ($diff < 86400) {
+            $h = (int)floor($diff / 3600);
+            return $h . ' hour' . ($h === 1 ? '' : 's') . ' ago';
+        }
+        $d = (int)floor($diff / 86400);
+        if ($d < 30) {
+            return $d . ' day' . ($d === 1 ? '' : 's') . ' ago';
+        }
+        return date('M j, Y', $ts);
+    }
+
+    private function makeRequest($url, $timeout = 8) {
+        $cacheFile = sys_get_temp_dir() . '/ufc_espn_' . md5($url) . '.json';
+
+        // Serve a fresh cached copy when available.
+        if (is_readable($cacheFile) && (time() - filemtime($cacheFile)) < $this->cacheTtl) {
+            $cached = file_get_contents($cacheFile);
+            if ($cached !== false && $cached !== '') {
                 return $cached;
             }
         }
-        
-        $data = $this->fetchNewsFromMMAMania($limit);
-        
-        if (!empty($data)) {
-            if ($this->cache) {
-                $this->cache->set($cacheKey, $data, 1800); // 30 minutes cache
-            }
-            $this->saveNewsToDatabase($data);
-        }
-        
-        return $data;
-    }
-    
-    // API Source Implementations
-    
-    private function fetchFromUFCStats($limit) {
-        $url = 'https://api.ufcstats.com/api/events';
-        
-        try {
-            $response = $this->makeRequest($url);
-            if ($response) {
-                $events = json_decode($response, true);
-                return array_slice($events, 0, $limit);
-            }
-        } catch (Exception $e) {
-            error_log("UFCStats API Error: " . $e->getMessage());
-        }
-        
-        return [];
-    }
-    
-    private function fetchFightCardFromUFCStats($eventId) {
-        $url = "https://api.ufcstats.com/api/event/{$eventId}";
-        
-        try {
-            $response = $this->makeRequest($url);
-            if ($response) {
-                return json_decode($response, true);
-            }
-        } catch (Exception $e) {
-            error_log("UFCStats Fight Card Error: " . $e->getMessage());
-        }
-        
-        return [];
-    }
-    
-    private function fetchRankingsFromUFCStats($weightClass) {
-        $url = 'https://api.ufcstats.com/api/rankings';
-        
-        try {
-            $response = $this->makeRequest($url);
-            if ($response) {
-                $rankings = json_decode($response, true);
-                // Filter by weight class if specified
-                if ($weightClass !== 'pound-for-pound') {
-                    return $this->filterRankingsByWeightClass($rankings, $weightClass);
-                }
-                return $rankings;
-            }
-        } catch (Exception $e) {
-            error_log("UFCStats Rankings Error: " . $e->getMessage());
-        }
-        
-        return [];
-    }
-    
-    private function fetchFighterFromUFCStats($fighterId) {
-        $url = "https://api.ufcstats.com/api/fighter/{$fighterId}";
-        
-        try {
-            $response = $this->makeRequest($url);
-            if ($response) {
-                return json_decode($response, true);
-            }
-        } catch (Exception $e) {
-            error_log("UFCStats Fighter Error: " . $e->getMessage());
-        }
-        
-        return [];
-    }
-    
-    private function fetchNewsFromMMAMania($limit) {
-        // RSS feed from MMA Mania
-        $url = 'https://www.mmanmania.com/rss';
-        
-        try {
-            $response = $this->makeRequest($url);
-            if ($response) {
-                $rss = simplexml_load_string($response);
-                $news = [];
-                
-                foreach ($rss->channel->item as $item) {
-                    if (count($news) >= $limit) break;
-                    
-                    $news[] = [
-                        'title' => (string)$item->title,
-                        'link' => (string)$item->link,
-                        'description' => (string)$item->description,
-                        'pubDate' => (string)$item->pubDate
-                    ];
-                }
-                
-                return $news;
-            }
-        } catch (Exception $e) {
-            error_log("MMA Mania News Error: " . $e->getMessage());
-        }
-        
-        return [];
-    }
-    
-    // Fallback sources
-    private function fetchFromSherdog($limit) {
-        // Sherdog API implementation
-        return [];
-    }
-    
-    private function fetchFromTapology($limit) {
-        // Tapology API implementation
-        return [];
-    }
-    
-    // Helper methods
-    private function makeRequest($url, $timeout = 30) {
-        if (!function_exists('curl_init')) {
-            error_log("cURL extension not available; skipping live request to {$url}");
-            return false;
-        }
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
-        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        
-        $response = curl_exec($ch);
-        $error = curl_error($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        
-        if ($error) {
-            error_log("CURL Error: " . $error);
-            return false;
-        }
-        
-        if ($httpCode !== 200) {
-            error_log("HTTP Error: " . $httpCode);
-            return false;
-        }
-        
-        return $response;
-    }
-    
-    private function filterRankingsByWeightClass($rankings, $weightClass) {
-        $filtered = [];
-        foreach ($rankings as $ranking) {
-            if (strtolower($ranking['weight_class']) === strtolower($weightClass)) {
-                $filtered[] = $ranking;
-            }
-        }
-        return $filtered;
-    }
-    
-    // Database operations
-    private function saveEventsToDatabase($events) {
-        global $conn;
-        
-        foreach ($events as $event) {
-            $stmt = db_prepare($conn, "
-                INSERT INTO ufc_events (event_name, event_date, location, api_event_id)
-                VALUES (?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE 
-                event_name = VALUES(event_name),
-                event_date = VALUES(event_date),
-                location = VALUES(location),
-                updated_at = CURRENT_TIMESTAMP
-            ");
-            
-            db_execute($stmt, [
-                $event['name'],
-                $event['date'],
-                $event['location'] ?? null,
-                $event['id'] ?? null
-            ]);
-        }
-    }
-    
-    private function saveFightCardToDatabase($eventId, $fightCard) {
-        global $conn;
-        
-        foreach ($fightCard as $fight) {
-            // Save fighters first
-            $fighterAId = $this->getOrCreateFighter($fight['fighter_a']);
-            $fighterBId = $this->getOrCreateFighter($fight['fighter_b']);
-            
-            $stmt = db_prepare($conn, "
-                INSERT INTO ufc_fight_cards (event_id, fighter_a_id, fighter_b_id, weight_class, bout_order, card_type)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE
-                weight_class = VALUES(weight_class),
-                bout_order = VALUES(bout_order),
-                card_type = VALUES(card_type),
-                updated_at = CURRENT_TIMESTAMP
-            ");
-            
-            db_execute($stmt, [
-                $eventId,
-                $fighterAId,
-                $fighterBId,
-                $fight['weight_class'] ?? null,
-                $fight['bout_order'] ?? null,
-                $fight['card_type'] ?? 'main_card'
-            ]);
-        }
-    }
-    
-    private function saveRankingsToDatabase($weightClass, $rankings) {
-        global $conn;
-        
-        foreach ($rankings as $ranking) {
-            $fighterId = $this->getOrCreateFighter($ranking['fighter']);
-            
-            $stmt = db_prepare($conn, "
-                INSERT INTO ufc_rankings (fighter_id, weight_class, rank_position, is_champion, ranking_date)
-                VALUES (?, ?, ?, ?, CURDATE())
-                ON DUPLICATE KEY UPDATE
-                rank_position = VALUES(rank_position),
-                is_champion = VALUES(is_champion),
-                ranking_date = VALUES(ranking_date),
-                updated_at = CURRENT_TIMESTAMP
-            ");
-            
-            db_execute($stmt, [
-                $fighterId,
-                $weightClass,
-                $ranking['rank'] ?? null,
-                $ranking['is_champion'] ?? 0
-            ]);
-        }
-    }
-    
-    private function saveFighterToDatabase($fighterData) {
-        $this->getOrCreateFighter($fighterData);
-    }
-    
-    private function saveNewsToDatabase($news) {
-        global $conn;
-        
-        foreach ($news as $item) {
-            $stmt = db_prepare($conn, "
-                INSERT INTO ufc_news (title, content, source, news_url, published_at)
-                VALUES (?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE
-                title = VALUES(title),
-                content = VALUES(content),
-                updated_at = CURRENT_TIMESTAMP
-            ");
-            
-            db_execute($stmt, [
-                $item['title'],
-                $item['description'] ?? null,
-                'MMA Mania',
-                $item['link'] ?? null,
-                date('Y-m-d H:i:s', strtotime($item['pubDate'] ?? 'now'))
-            ]);
-        }
-    }
-    
-    private function getOrCreateFighter($fighterData) {
-        global $conn;
-        
-        $name = is_array($fighterData) ? ($fighterData['name'] ?? '') : $fighterData;
-        $nameParts = explode(' ', $name, 2);
-        $firstName = $nameParts[0] ?? '';
-        $lastName = $nameParts[1] ?? '';
-        
-        // Try to find existing fighter
-        $stmt = db_prepare($conn, "SELECT id FROM ufc_fighters WHERE first_name = ? AND last_name = ?");
-        db_execute($stmt, [$firstName, $lastName]);
-        $result = db_fetch_assoc($stmt);
-        
-        if ($result) {
-            return $result['id'];
-        }
-        
-        // Create new fighter
-        $stmt = db_prepare($conn, "
-            INSERT INTO ufc_fighters (first_name, last_name, nickname, weight_class, record_wins, record_losses, record_draws)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ");
-        
-        db_execute($stmt, [
-            $firstName,
-            $lastName,
-            $fighterData['nickname'] ?? null,
-            $fighterData['weight_class'] ?? null,
-            $fighterData['record_wins'] ?? 0,
-            $fighterData['record_losses'] ?? 0,
-            $fighterData['record_draws'] ?? 0
-        ]);
-        
-        return db_insert_id($conn);
-    }
-}
 
-// Cache Class
-class UFCCache {
-    private $conn;
-    
-    public function __construct() {
-        global $conn;
-        $this->conn = $conn;
-    }
-    
-    public function get($key) {
-        try {
-            $stmt = db_prepare($this->conn, "
-                SELECT cache_data FROM ufc_api_cache 
-                WHERE cache_key = ? AND expires_at > NOW()
-            ");
-            db_execute($stmt, [$key]);
-            $result = db_fetch_assoc($stmt);
-            
-            if ($result) {
-                return json_decode($result['cache_data'], true);
-            }
-        } catch (Exception $e) {
-            error_log("Cache get error: " . $e->getMessage());
+        $body = $this->httpGet($url, $timeout);
+        if ($body !== false && $body !== '') {
+            @file_put_contents($cacheFile, $body);
+            return $body;
         }
-        
+
+        // Network failed: fall back to a stale cache if we have one.
+        if (is_readable($cacheFile)) {
+            $stale = file_get_contents($cacheFile);
+            if ($stale !== false && $stale !== '') {
+                error_log("ESPN request failed for {$url}; serving stale cache");
+                return $stale;
+            }
+        }
         return false;
     }
-    
-    public function set($key, $data, $expirySeconds) {
-        try {
-            $expiresAt = date('Y-m-d H:i:s', time() + $expirySeconds);
-            
-            $stmt = db_prepare($this->conn, "
-                INSERT INTO ufc_api_cache (cache_key, cache_data, expires_at, api_source)
-                VALUES (?, ?, ?, 'ufc_data_fetcher')
-                ON DUPLICATE KEY UPDATE
-                cache_data = VALUES(cache_data),
-                expires_at = VALUES(expires_at),
-                cache_timestamp = CURRENT_TIMESTAMP
-            ");
-            
-            return db_execute($stmt, [$key, json_encode($data), $expiresAt]);
-        } catch (Exception $e) {
-            error_log("Cache set error: " . $e->getMessage());
-            return false;
-        }
-    }
-    
-    public function clear($key = null) {
-        try {
-            if ($key) {
-                $stmt = db_prepare($this->conn, "DELETE FROM ufc_api_cache WHERE cache_key = ?");
-                return db_execute($stmt, [$key]);
-            } else {
-                return db_query($this->conn, "DELETE FROM ufc_api_cache WHERE expires_at < NOW()");
+
+    private function httpGet($url, $timeout) {
+        $userAgent = 'Mozilla/5.0 (compatible; ufc.solutions/1.0)';
+
+        if (function_exists('curl_init')) {
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
+            curl_setopt($ch, CURLOPT_USERAGENT, $userAgent);
+            $body = curl_exec($ch);
+            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $err = curl_error($ch);
+            curl_close($ch);
+            if ($err || $code < 200 || $code >= 300) {
+                error_log("ESPN cURL request failed ({$url}): code={$code} err={$err}");
+                return false;
             }
-        } catch (Exception $e) {
-            error_log("Cache clear error: " . $e->getMessage());
-            return false;
+            return $body;
         }
+
+        if (ini_get('allow_url_fopen')) {
+            $context = stream_context_create([
+                'http' => [
+                    'timeout' => $timeout,
+                    'header' => "User-Agent: {$userAgent}\r\n",
+                    'ignore_errors' => true,
+                ],
+            ]);
+            $body = @file_get_contents($url, false, $context);
+            if ($body === false) {
+                error_log("ESPN file_get_contents request failed: {$url}");
+                return false;
+            }
+            return $body;
+        }
+
+        error_log('No HTTP transport available (no cURL and allow_url_fopen disabled)');
+        return false;
     }
 }
-?>
