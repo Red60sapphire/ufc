@@ -261,6 +261,10 @@ class UFCDataFetcher {
     
     // Helper methods
     private function makeRequest($url, $timeout = 30) {
+        if (!function_exists('curl_init')) {
+            error_log("cURL extension not available; skipping live request to {$url}");
+            return false;
+        }
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
