@@ -36,7 +36,7 @@ async function fetchAllAvailableEvents(): Promise<MEvent[]> {
   const data = extractNextData(html);
   const all: any[] = data?.props?.pageProps?.latestEvents || [];
   const avail = all.filter((e: any) => e.is_video_available);
-  console.log('[SCRAPER] Homepage:', all.length, 'total events,', avail.length, 'with video');
+  console.log('[SCRAPER] Homepage:', all.length, 'total,', avail.length, 'with video');
   return avail.map((e: any) => ({
     id: e.id, name: e.name, date: e.date, location: e.location || '',
     cover_url: e.cover_url ? `${API_BASE}${e.cover_url}` : '',
@@ -52,7 +52,7 @@ function formatDate(d: any): string {
   try { return new Date(d).toISOString().substring(0, 10); } catch { return ''; }
 }
 
-export async function scrapeAll(eventLimit = 20): Promise<{
+export async function scrapeAll(maxEvents = 30): Promise<{
   events: number; fights: number; newFights: number; errors: string[];
 }> {
   const errors: string[] = [];
@@ -64,106 +64,109 @@ export async function scrapeAll(eventLimit = 20): Promise<{
   try {
     const start = Date.now();
 
-    // Get all available events from homepage
+    // 1) Get all available events from homepage
     const allEvents = await fetchAllAvailableEvents();
 
-    // Get existing events from DB for dedup
+    // 2) Dedup against existing events in DB
     const existingRows: any[] = await query`SELECT DISTINCT event_name, event_date FROM ufc_replays`;
     const existingEvents = new Set(
       existingRows.map((r: any) => `${r.event_name}|${formatDate(r.event_date)}`)
     );
-
-    // Filter to new events only (not yet in DB)
     const newEvents = allEvents.filter(e => !existingEvents.has(`${e.name}|${e.date.substring(0, 10)}`));
-    console.log('[SCRAPER] New events:', newEvents.length, '(skipped', allEvents.length - newEvents.length, 'existing)');
+    console.log('[SCRAPER] New events:', newEvents.length, '(skipped', allEvents.length - newEvents.length, ')');
 
     if (newEvents.length === 0) {
-      console.log('[SCRAPER] No new events to scrape');
       return { events: 0, fights: 0, newFights: 0, errors };
     }
 
-    // Scan events sequentially until we find enough fights or hit the limit
-    // Process newest events first (they're more likely to have recent clips)
-    for (let i = 0; i < newEvents.length && eventsScanned < eventLimit; i++) {
-      const event = newEvents[i];
-      eventsScanned++;
+    // 3) Batch-fetch event pages (10 at a time) until we find enough clips
+    const toScan = newEvents.slice(0, maxEvents);
+    eventsScanned = 0;
+    eventsWithClips = 0;
+    const fightSources: { event: MEvent; fights: FightData[] }[] = [];
 
-      try {
-        const slug = buildEventSlug(event);
-        console.log('[SCRAPER] Fetching event:', event.name, event.date);
-        const html = await fetchPage(`${BASE}/events/${slug}`);
-        const data = extractNextData(html);
-        const fights: FightData[] = data?.props?.pageProps?.fights || [];
+    while (eventsScanned < toScan.length) {
+      const batch = toScan.slice(eventsScanned, eventsScanned + 10);
+      eventsScanned += batch.length;
 
-        const validFights = fights.filter(f => f.clip && f.is_clip_available && f.participants?.length >= 2);
-        totalFights += fights.length;
-
-        if (validFights.length === 0) {
-          console.log('[SCRAPER]  ', event.name, '- no clips, skipping');
-          continue;
+      const pageResults = await Promise.all(batch.map(async (event) => {
+        try {
+          const slug = buildEventSlug(event);
+          const html = await fetchPage(`${BASE}/events/${slug}`);
+          const data = extractNextData(html);
+          const fights: FightData[] = data?.props?.pageProps?.fights || [];
+          return { event, fights, error: null as string | null };
+        } catch (err: any) {
+          return { event, fights: [] as FightData[], error: err.message };
         }
+      }));
 
-        eventsWithClips++;
-        console.log('[SCRAPER]  ', event.name, '-', validFights.length, 'fights with clips');
-
-        // Process this event's fights in parallel
-        for (const fight of validFights) {
-          try {
-            const p1 = fight.participants[0];
-            const p2 = fight.participants[1];
-            const title = `${p1.display_name} vs ${p2.display_name}`;
-            const fightSlug = `${event.date}-${slugify(p1.display_name)}-vs-${slugify(p2.display_name)}-${fight.id}`;
-
-            // Slug dedup
-            const existing = await query`SELECT id FROM ufc_replays WHERE slug = ${fightSlug}`;
-            if (existing.length > 0) continue;
-
-            const clipUrl = `${API_BASE}${fight.clip!.playlist_url}`;
-
-            // Validate clip
-            const verify = await fetch(clipUrl, {
-              headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Referer': 'https://mmareplayfull.com/',
-              },
-            });
-            if (!verify.ok) {
-              errors.push(`${title}: clip HTTP ${verify.status}`);
-              continue;
-            }
-
-            const promotion = event.name.includes('UFC') ? 'UFC' :
-              event.name.includes('PFL') ? 'PFL' :
-              event.name.includes('ONE') ? 'ONE Championship' :
-              event.name.includes('Bellator') ? 'Bellator' : 'UFC';
-
-            const result = fight.method && fight.round ? `${fight.method} Round ${fight.round}` : null;
-            const desc = `${p1.display_name} vs ${p2.display_name} at ${event.name}. ${fight.weight_class || ''} bout. Full fight replay available.`;
-            const img1 = p1.fighter?.vertical_image_url || p1.fighter?.thumbnail_url || '';
-            const img2 = p2.fighter?.vertical_image_url || p2.fighter?.thumbnail_url || '';
-            const videoUrl = `/api/video-proxy?url=${encodeURIComponent(clipUrl)}`;
-
-            await rawQueryOrThrow(
-              `INSERT INTO ufc_replays (title,slug,promotion,event_name,fighter1,fighter2,fighter1_img,fighter2_img,weight_class,result,duration,description,thumbnail,video_url,event_date,featured,published,views,created_at,updated_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,0,1,0,NOW(),NOW())`,
-              [title, fightSlug, promotion, event.name, p1.display_name, p2.display_name,
-               img1 ? `${API_BASE}${img1}` : '', img2 ? `${API_BASE}${img2}` : '',
-               fight.weight_class || null, result, fight.fight_time || null, desc,
-               event.cover_url || null, videoUrl, event.date || null]
-            );
-            newFights++;
-          } catch (err: any) {
-            errors.push(`Fight ${fight.id}: ${err.message}`);
-          }
+      for (const pr of pageResults) {
+        if (pr.error) { errors.push(`${pr.event.name}: ${pr.error}`); continue; }
+        totalFights += pr.fights.length;
+        const valid = pr.fights.filter(f => f.clip && f.is_clip_available && f.participants?.length >= 2);
+        if (valid.length > 0) {
+          eventsWithClips++;
+          fightSources.push({ event: pr.event, fights: valid });
+          console.log('[SCRAPER]  ', pr.event.name, '-', valid.length, 'clips');
+        } else {
+          console.log('[SCRAPER]  ', pr.event.name, '- 0 clips');
         }
-        console.log('[SCRAPER]  ', event.name, '- inserted', newFights, 'total so far');
-      } catch (err: any) {
-        errors.push(`${event.name}: ${err.message}`);
+      }
+    }
+
+    console.log('[SCRAPER] Scanned', eventsScanned, 'events,', eventsWithClips, 'with clips in', Date.now() - start, 'ms');
+
+    // 4) Process fights from events that have clips (sequential per event, skip slug dupes)
+    for (const { event, fights } of fightSources) {
+      for (const fight of fights) {
+        try {
+          const p1 = fight.participants[0];
+          const p2 = fight.participants[1];
+          const title = `${p1.display_name} vs ${p2.display_name}`;
+          const fightSlug = `${event.date}-${slugify(p1.display_name)}-vs-${slugify(p2.display_name)}-${fight.id}`;
+
+          const existing = await query`SELECT id FROM ufc_replays WHERE slug = ${fightSlug}`;
+          if (existing.length > 0) continue;
+
+          const clipUrl = `${API_BASE}${fight.clip!.playlist_url}`;
+
+          const verify = await fetch(clipUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              'Referer': 'https://mmareplayfull.com/',
+            },
+          });
+          if (!verify.ok) { errors.push(`${title}: clip ${verify.status}`); continue; }
+
+          const promotion = event.name.includes('UFC') ? 'UFC' :
+            event.name.includes('PFL') ? 'PFL' :
+            event.name.includes('ONE') ? 'ONE Championship' :
+            event.name.includes('Bellator') ? 'Bellator' : 'UFC';
+
+          const result = fight.method && fight.round ? `${fight.method} Round ${fight.round}` : null;
+          const desc = `${p1.display_name} vs ${p2.display_name} at ${event.name}. ${fight.weight_class || ''} bout.`;
+          const img1 = p1.fighter?.vertical_image_url || p1.fighter?.thumbnail_url || '';
+          const img2 = p2.fighter?.vertical_image_url || p2.fighter?.thumbnail_url || '';
+          const videoUrl = `/api/video-proxy?url=${encodeURIComponent(clipUrl)}`;
+
+          await rawQueryOrThrow(
+            `INSERT INTO ufc_replays (title,slug,promotion,event_name,fighter1,fighter2,fighter1_img,fighter2_img,weight_class,result,duration,description,thumbnail,video_url,event_date,featured,published,views,created_at,updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,0,1,0,NOW(),NOW())`,
+            [title, fightSlug, promotion, event.name, p1.display_name, p2.display_name,
+             img1 ? `${API_BASE}${img1}` : '', img2 ? `${API_BASE}${img2}` : '',
+             fight.weight_class || null, result, fight.fight_time || null, desc,
+             event.cover_url || null, videoUrl, event.date || null]
+          );
+          newFights++;
+        } catch (err: any) {
+          errors.push(`Fight ${fight.id}: ${err.message}`);
+        }
       }
     }
 
     const elapsed = Date.now() - start;
-    console.log('[SCRAPER] Done:', eventsScanned, 'scanned,', eventsWithClips, 'with clips,', totalFights, 'fights total,', newFights, 'new,', elapsed, 'ms');
+    console.log('[SCRAPER] Done:', eventsScanned, 'scanned,', eventsWithClips, 'with clips,', newFights, 'new,', elapsed, 'ms');
   } catch (err: any) {
     errors.push(`Scrape failed: ${err.message}`);
     console.error('[SCRAPER] Fatal:', err.message);
