@@ -77,14 +77,23 @@ export default async function HomePage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-8 space-y-24">
-        <section className="animate-in stagger-1">
-          <HeroSection
-            mainEvent={mainEvent}
-            fighter1Data={fighter1Data}
-            fighter2Data={fighter2Data}
-            hasStreams={hasStreams}
-          />
-        </section>
+        {liveStreams.length > 0 ? (
+          <section className="animate-in stagger-1">
+            <StreamSection streams={streams} />
+            <div className="mt-8">
+              <ChatBox streams={streams} />
+            </div>
+          </section>
+        ) : (
+          <section className="animate-in stagger-1">
+            <HeroSection
+              mainEvent={mainEvent}
+              fighter1Data={fighter1Data}
+              fighter2Data={fighter2Data}
+              hasStreams={hasStreams}
+            />
+          </section>
+        )}
 
         <section className="animate-in stagger-2">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -315,10 +324,10 @@ export default async function HomePage() {
           </div>
         </section>
 
-        {streams.length > 0 && (
+        {streams.length > 0 && liveStreams.length === 0 && (
           <>
             <section className="animate-in stagger-5">
-              <SectionHeader label={liveStreams.length > 0 ? 'Live Streams' : 'Streams'} />
+              <SectionHeader label="Streams" />
               <StreamSection streams={streams} />
             </section>
             <section className="animate-in stagger-5">

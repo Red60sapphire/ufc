@@ -58,7 +58,7 @@ interface Replay {
   created_at: string;
 }
 
-type Tab = 'dashboard' | 'streams' | 'replays' | 'users' | 'chatlog';
+type Tab = 'dashboard' | 'streams' | 'replays' | 'users' | 'chatlog' | 'announcements';
 
 export default function AdminDashboard({ user }: { user: { id: number; username: string; is_admin: number } }) {
   const [tab, setTab] = useState<Tab>('dashboard');
@@ -105,6 +105,7 @@ export default function AdminDashboard({ user }: { user: { id: number; username:
     { key: 'replays', label: 'Replays', icon: 'M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z' },
     { key: 'users', label: 'Users', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z' },
     { key: 'chatlog', label: 'Chat Log', icon: 'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z' },
+    { key: 'announcements', label: 'Announcements', icon: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9' },
   ];
 
   return (
@@ -140,6 +141,7 @@ export default function AdminDashboard({ user }: { user: { id: number; username:
         {tab === 'replays' && <ReplaysTab replays={replays} onRefresh={() => fetch('/api/replays').then(r => r.json()).then(d => { if (d.replays) setReplays(d.replays); })} />}
         {tab === 'users' && <UsersTab users={recentUsers} />}
         {tab === 'chatlog' && <ChatLogTab messages={allMessages} />}
+        {tab === 'announcements' && <AnnouncementsTab />}
       </div>
     </div>
   );
@@ -561,6 +563,154 @@ function UsersTab({ users }: { users: RecentUser[] }) {
             ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+function AnnouncementsTab() {
+  interface AnnouncementItem { id: number; title: string; message: string; created_by: number; created_at: string; expires_at: string | null; is_active: number; dismissible: number; persistent: number; duration_minutes: number | null; username?: string; }
+  const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
+  const [title, setTitle] = useState('');
+  const [message, setMessage] = useState('');
+  const [durationMinutes, setDurationMinutes] = useState(60);
+  const [dismissible, setDismissible] = useState(true);
+  const [persistent, setPersistent] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const [error, setError] = useState('');
+
+  const fetchAnnouncements = () => {
+    fetch('/api/announcements')
+      .then((r) => r.json())
+      .then((d) => { if (d.announcements) setAnnouncements(d.announcements); });
+  };
+
+  useEffect(() => { fetchAnnouncements(); }, []);
+
+  const handleCreate = async (e: FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (!message.trim()) { setError('Message is required'); return; }
+    const res = await fetch('/api/announcements', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, message, duration_minutes: durationMinutes, dismissible, persistent }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      setTitle(''); setMessage(''); setDurationMinutes(60); setDismissible(true); setPersistent(false);
+      setShowAdd(false);
+      fetchAnnouncements();
+    } else {
+      setError(data.error || 'Failed');
+    }
+  };
+
+  const toggleActive = async (id: number, current: number) => {
+    await fetch('/api/announcements', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, is_active: current ? 0 : 1 }),
+    });
+    fetchAnnouncements();
+  };
+
+  const deleteAnnouncement = async (id: number) => {
+    await fetch('/api/announcements', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    fetchAnnouncements();
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h2 className="text-white text-sm uppercase tracking-wider font-semibold">Announcements ({announcements.length})</h2>
+        <button onClick={() => setShowAdd(!showAdd)} className="bg-ufc-red text-white px-5 py-2 text-xs uppercase font-semibold rounded-full hover:bg-red-700 transition shadow-lg shadow-red-900/30">
+          {showAdd ? 'Cancel' : '+ New Announcement'}
+        </button>
+      </div>
+
+      {showAdd && (
+        <form onSubmit={handleCreate} className="bg-gradient-to-b from-[#1a1a1a] to-[#111] border border-gray-800 rounded-2xl p-6 space-y-4 card-hover">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-gray-400 text-[10px] uppercase tracking-wider mb-1.5">Title (optional)</label>
+              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Announcement title" className="w-full bg-white/5 border border-gray-700/50 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-ufc-red/50 transition-all" />
+            </div>
+            <div>
+              <label className="block text-gray-400 text-[10px] uppercase tracking-wider mb-1.5">Duration (minutes)</label>
+              <input type="number" value={durationMinutes} onChange={(e) => setDurationMinutes(Number(e.target.value))} min={0} className="w-full bg-white/5 border border-gray-700/50 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-ufc-red/50 transition-all" />
+              <p className="text-gray-600 text-[9px] mt-1">Set to 0 for no expiry (manual deactivation only)</p>
+            </div>
+          </div>
+          <div>
+            <label className="block text-gray-400 text-[10px] uppercase tracking-wider mb-1.5">Message</label>
+            <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={4} placeholder="Your announcement message..." required className="w-full bg-white/5 border border-gray-700/50 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-ufc-red/50 transition-all resize-none" />
+          </div>
+          <div className="flex flex-wrap gap-4">
+            <label className="flex items-center gap-2 text-gray-300 text-xs bg-white/[0.03] rounded-xl px-4 py-3">
+              <input type="checkbox" checked={dismissible} onChange={(e) => setDismissible(e.target.checked)} className="accent-ufc-red w-4 h-4" />
+              <span>Dismissible (users can close it)</span>
+            </label>
+            <label className="flex items-center gap-2 text-gray-300 text-xs bg-white/[0.03] rounded-xl px-4 py-3">
+              <input type="checkbox" checked={persistent} onChange={(e) => setPersistent(e.target.checked)} className="accent-ufc-red w-4 h-4" />
+              <span>Show on revisit (show again even if dismissed)</span>
+            </label>
+          </div>
+          {error && <p className="text-red-400 text-xs bg-red-400/10 rounded-lg px-3 py-2">{error}</p>}
+          <button type="submit" className="bg-ufc-red text-white px-6 py-2.5 text-sm uppercase font-semibold rounded-xl hover:bg-red-700 transition shadow-lg shadow-red-900/30">
+            Send Announcement
+          </button>
+        </form>
+      )}
+
+      <div className="bg-gradient-to-b from-[#1a1a1a] to-[#111] border border-gray-800 rounded-2xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-white/[0.03] border-b border-gray-800/50">
+                <th className="text-left px-5 py-3.5 text-gray-400 text-[10px] uppercase tracking-wider font-semibold">Title</th>
+                <th className="text-left px-5 py-3.5 text-gray-400 text-[10px] uppercase tracking-wider font-semibold">Message</th>
+                <th className="text-left px-5 py-3.5 text-gray-400 text-[10px] uppercase tracking-wider font-semibold">Status</th>
+                <th className="text-left px-5 py-3.5 text-gray-400 text-[10px] uppercase tracking-wider font-semibold">Expires</th>
+                <th className="text-right px-5 py-3.5 text-gray-400 text-[10px] uppercase tracking-wider font-semibold">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-800/50">
+              {announcements.map((a) => {
+                const expired = a.expires_at && new Date(a.expires_at) < new Date();
+                return (
+                  <tr key={a.id} className="hover:bg-white/[0.02] transition-colors">
+                    <td className="px-5 py-4 text-white text-xs font-medium max-w-[150px] truncate">{a.title || '—'}</td>
+                    <td className="px-5 py-4 text-gray-300 text-xs max-w-[250px] truncate">{a.message}</td>
+                    <td className="px-5 py-4">
+                      {a.is_active && !expired ? (
+                        <span className="live-badge bg-green-500/10 text-green-400 text-[10px] px-2.5 py-0.5 rounded-full uppercase font-bold">Active</span>
+                      ) : (
+                        <span className="bg-white/5 text-gray-500 text-[10px] px-2.5 py-0.5 rounded-full uppercase">{expired ? 'Expired' : 'Inactive'}</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-4 text-gray-500 text-xs">{a.expires_at ? new Date(a.expires_at).toLocaleString() : 'Never'}</td>
+                    <td className="px-5 py-4 text-right whitespace-nowrap">
+                      <button onClick={() => toggleActive(a.id, a.is_active)} className={`text-xs mr-2 px-3 py-1 rounded-full transition ${
+                        a.is_active ? 'text-yellow-400 bg-yellow-400/10 hover:bg-yellow-400/20' : 'text-green-400 bg-green-400/10 hover:bg-green-400/20'
+                      }`}>
+                        {a.is_active ? 'Deactivate' : 'Activate'}
+                      </button>
+                      <button onClick={() => deleteAnnouncement(a.id)} className="text-red-400 text-xs px-3 py-1 rounded-full bg-red-400/10 hover:bg-red-400/20 transition">Delete</button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {announcements.length === 0 && (
+                <tr><td colSpan={5} className="px-5 py-12 text-center text-gray-500 text-sm">No announcements yet</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

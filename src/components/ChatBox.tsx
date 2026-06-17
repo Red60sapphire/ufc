@@ -37,7 +37,6 @@ export default function ChatBox({ streams }: { streams: Stream[] }) {
   const [user, setUser] = useState<{ id: number; username: string; is_admin: number } | null>(null);
   const [error, setError] = useState('');
   const [guestName, setGuestName] = useState('');
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval>>(undefined);
   const inputRef = useRef<HTMLInputElement>(null);
   const { addToast } = useToast();
@@ -63,8 +62,12 @@ export default function ChatBox({ streams }: { streams: Stream[] }) {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [activeStreamId]);
 
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+    }
   }, [messages]);
 
   const sendMessage = async (e: React.FormEvent) => {
@@ -166,7 +169,7 @@ export default function ChatBox({ streams }: { streams: Stream[] }) {
           ) : null}
         </div>
 
-        <div className="h-64 overflow-y-auto p-4 space-y-2 bg-[#0a0a0a]">
+        <div ref={scrollContainerRef} className="h-64 overflow-y-scroll p-4 space-y-2 bg-[#0a0a0a]">
           {messages.map((msg) => {
             const isGuest = !msg.is_admin && msg.username?.startsWith('Fighter-');
             return (
@@ -194,7 +197,6 @@ export default function ChatBox({ streams }: { streams: Stream[] }) {
               </div>
             );
           })}
-          <div ref={messagesEndRef} />
         </div>
 
         <div className="border-t border-gray-800/50 p-4">

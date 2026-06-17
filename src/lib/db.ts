@@ -74,6 +74,20 @@ export async function initDb() {
   `;
   try { await queryRaw`ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS guest_name TEXT`; } catch {}
   await queryRaw`
+    CREATE TABLE IF NOT EXISTS announcements (
+      id SERIAL PRIMARY KEY,
+      title TEXT NOT NULL DEFAULT '',
+      message TEXT NOT NULL,
+      created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      expires_at TIMESTAMP,
+      is_active INTEGER DEFAULT 1,
+      dismissible INTEGER DEFAULT 1,
+      persistent INTEGER DEFAULT 0,
+      duration_minutes INTEGER
+    )
+  `;
+  await queryRaw`
     CREATE TABLE IF NOT EXISTS ufc_replays (
       id SERIAL PRIMARY KEY,
       fighter1 TEXT,
@@ -112,6 +126,15 @@ export async function initDb() {
     await queryRaw`
       INSERT INTO users (username, email, password, is_admin)
       VALUES ('admin', 'admin@streaming.com', ${hashedPassword}, 1)
+    `;
+  }
+  const buckledExists = await queryRaw`SELECT COUNT(*) as count FROM users WHERE username = 'buckledpepper'`;
+  if (buckledExists[0]?.count === '0' || buckledExists[0]?.count === 0) {
+    const bcrypt = await import('bcryptjs');
+    const hashedPassword = await bcrypt.hash('snail', 10);
+    await queryRaw`
+      INSERT INTO users (username, email, password, is_admin)
+      VALUES ('buckledpepper', 'buckled@streaming.com', ${hashedPassword}, 1)
     `;
   }
 }

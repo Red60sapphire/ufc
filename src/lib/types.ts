@@ -94,6 +94,19 @@ export interface Replay {
   created_at: string;
 }
 
+export interface Announcement {
+  id: number;
+  title: string;
+  message: string;
+  created_by: number;
+  created_at: string;
+  expires_at: string | null;
+  is_active: number;
+  dismissible: number;
+  persistent: number;
+  duration_minutes: number | null;
+}
+
 export interface Ranking {
   rank: number;
   fighter: string;

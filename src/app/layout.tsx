@@ -3,6 +3,7 @@ import "./globals.css";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { ToastProvider } from "@/lib/toast";
+import AnnouncementPopup from "@/components/AnnouncementPopup";
 import { cookies } from "next/headers";
 
 export const metadata: Metadata = {
@@ -33,6 +34,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <Navbar user={user} />
           <main className="flex-1">{children}</main>
           <Footer />
+          <AnnouncementPopup />
         </ToastProvider>
       </body>
     </html>
