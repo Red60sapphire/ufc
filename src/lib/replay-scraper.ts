@@ -152,7 +152,8 @@ export async function scrapeAll(): Promise<{
               event.name.includes('ONE') ? 'ONE Championship' :
               event.name.includes('Bellator') ? 'Bellator' : 'UFC';
 
-            const videoUrl = `${API_BASE}${fight.clip.playlist_url}`;
+            const clipUrl = `${API_BASE}${fight.clip.playlist_url}`;
+            const videoUrl = `/api/video-proxy?url=${encodeURIComponent(clipUrl)}`;
 
             await rawQueryOrThrow(
               `INSERT INTO ufc_replays (title, slug, promotion, event_name, fighter1, fighter2, fighter1_img, fighter2_img, weight_class, result, duration, description, thumbnail, video_url, event_date, featured, published, views, created_at, updated_at)

@@ -31,12 +31,13 @@ export async function GET(request: NextRequest) {
     const forceScrape = searchParams.get('force') === '1';
     const countRows = await query`SELECT COUNT(*) as count FROM ufc_replays`;
     if (forceScrape || (countRows.length === 0 || parseInt(countRows[0]?.count || '0') === 0)) {
-      const result = await scrapeAll();
-      if (result.errors.length > 0) {
-        console.error('Auto-scrape errors:', JSON.stringify(result.errors));
-      } else {
-        console.log('Auto-scrape result:', result.newFights, 'new fights from', result.events, 'events');
-      }
+      scrapeAll().then(result => {
+        if (result.errors.length > 0) {
+          console.error('Auto-scrape errors:', JSON.stringify(result.errors.slice(0, 5)));
+        } else {
+          console.log('Auto-scrape result:', result.newFights, 'new fights from', result.events, 'events');
+        }
+      }).catch(e => console.error('Auto-scrape failed:', e));
     }
 
     const conditions: string[] = [];

@@ -14,31 +14,61 @@ export default function VideoPlayer({ src, poster, className = '' }: VideoPlayer
   const [error, setError] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
+  const videoSrc = src?.includes('api.mmareplayfull.com') && !src.includes('/api/video-proxy')
+    ? `/api/video-proxy?url=${encodeURIComponent(src)}`
+    : src;
+
   useEffect(() => {
-    if (!src) return;
-    const isHlsStream = src.includes('.m3u8') || src.includes('/play/clip/') || src.includes('/play/file/') || src.includes('/play/seg');
+    if (!videoSrc) return;
+    const isHlsStream = videoSrc.includes('.m3u8') || videoSrc.includes('/play/clip/') || videoSrc.includes('/play/file/') || videoSrc.includes('/play/seg') || videoSrc.includes('/api/video-proxy');
     setIsHls(isHlsStream);
+    setError(false);
+    setLoaded(false);
 
     if (isHlsStream) {
-      const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/hls.js@latest';
-      script.onload = () => {
+      let hlsInstance: any = null;
+
+      const initHls = () => {
         if ((window as any).Hls && videoRef.current) {
-          const hls = new (window as any).Hls();
-          hls.loadSource(src);
-          hls.attachMedia(videoRef.current);
-          hls.on((window as any).Hls.Events.MANIFEST_PARSED, () => {
-            setLoaded(true);
-            videoRef.current?.play().catch(() => {});
-          });
+          if ((window as any).Hls.isSupported()) {
+            hlsInstance = new (window as any).Hls();
+            hlsInstance.loadSource(videoSrc);
+            hlsInstance.attachMedia(videoRef.current);
+            hlsInstance.on((window as any).Hls.Events.MANIFEST_PARSED, () => {
+              setLoaded(true);
+              videoRef.current?.play().catch(() => {});
+            });
+            hlsInstance.on((window as any).Hls.Events.ERROR, (event: any, data: any) => {
+              if (data.fatal) {
+                setError(true);
+              }
+            });
+          } else {
+            setError(true);
+          }
         }
       };
-      document.body.appendChild(script);
-      return () => { document.body.removeChild(script); };
-    }
-  }, [src]);
 
-  const isYouTube = src.includes('youtube.com') || src.includes('youtu.be');
+      if ((window as any).Hls) {
+        initHls();
+      } else {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/hls.js@latest';
+        script.async = true;
+        script.onload = initHls;
+        script.onerror = () => setError(true);
+        document.body.appendChild(script);
+      }
+
+      return () => {
+        if (hlsInstance) {
+          hlsInstance.destroy();
+        }
+      };
+    }
+  }, [videoSrc]);
+
+  const isYouTube = src?.includes('youtube.com') || src?.includes('youtu.be');
 
   if (isYouTube) {
     const videoId = src.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]+)/)?.[1];
@@ -64,6 +94,12 @@ export default function VideoPlayer({ src, poster, className = '' }: VideoPlayer
             <div className="w-8 h-8 border-2 border-ufc-red border-t-transparent rounded-full animate-spin" />
           </div>
         )}
+        {error && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500 gap-2">
+            <svg className="w-10 h-10" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
+            <span className="text-xs">Failed to load video</span>
+          </div>
+        )}
       </div>
     );
   }
@@ -78,7 +114,7 @@ export default function VideoPlayer({ src, poster, className = '' }: VideoPlayer
       ) : (
         <video
           ref={videoRef}
-          src={src}
+          src={videoSrc}
           poster={poster}
           className="w-full h-full"
           controls
