@@ -3,21 +3,8 @@ import { query } from '@/lib/db';
 import { cookies } from 'next/headers';
 
 export async function POST(request: NextRequest) {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get('session');
-  if (!sessionCookie?.value) {
-    return NextResponse.json({ success: false, error: 'Not logged in' }, { status: 401 });
-  }
-
-  let user: { id: number; username: string; is_admin: number };
   try {
-    user = JSON.parse(Buffer.from(sessionCookie.value, 'base64').toString('utf-8'));
-  } catch {
-    return NextResponse.json({ success: false, error: 'Invalid session' }, { status: 401 });
-  }
-
-  try {
-    const { stream_id, message } = await request.json();
+    const { stream_id, message, guest_name } = await request.json();
 
     if (!message || !message.trim()) {
       return NextResponse.json({ success: false, error: 'Message is required' }, { status: 400 });
@@ -31,10 +18,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Stream not found' }, { status: 404 });
     }
 
-    await query`
-      INSERT INTO chat_messages (stream_id, user_id, message)
-      VALUES (${stream_id}, ${user.id}, ${message.trim()})
-    `;
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get('session');
+
+    if (sessionCookie?.value) {
+      let user: { id: number; username: string; is_admin: number };
+      try {
+        user = JSON.parse(Buffer.from(sessionCookie.value, 'base64').toString('utf-8'));
+      } catch {
+        return NextResponse.json({ success: false, error: 'Invalid session' }, { status: 401 });
+      }
+      await query`
+        INSERT INTO chat_messages (stream_id, user_id, message)
+        VALUES (${stream_id}, ${user.id}, ${message.trim()})
+      `;
+    } else if (guest_name && guest_name.trim()) {
+      const name = guest_name.trim().slice(0, 30);
+      await query`
+        INSERT INTO chat_messages (stream_id, guest_name, message)
+        VALUES (${stream_id}, ${name}, ${message.trim()})
+      `;
+    } else {
+      return NextResponse.json({ success: false, error: 'Sign in or provide a guest name' }, { status: 401 });
+    }
 
     return NextResponse.json({ success: true });
   } catch (err) {

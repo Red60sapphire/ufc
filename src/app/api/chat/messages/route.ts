@@ -10,9 +10,11 @@ export async function GET(request: NextRequest) {
   }
 
   const messages = await query`
-    SELECT cm.*, u.username, u.is_admin
+    SELECT cm.id, cm.stream_id, cm.user_id, cm.guest_name, cm.message, cm.created_at,
+      COALESCE(u.username, cm.guest_name) as username,
+      COALESCE(u.is_admin, 0) as is_admin
     FROM chat_messages cm
-    JOIN users u ON cm.user_id = u.id
+    LEFT JOIN users u ON cm.user_id = u.id
     WHERE cm.stream_id = ${parseInt(stream_id)}
     ORDER BY cm.created_at ASC
     LIMIT 100

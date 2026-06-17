@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import AdminClient from './AdminClient';
+import AdminDashboard from './AdminDashboard';
 
 export default async function AdminPage() {
   const cookieStore = await cookies();
@@ -17,5 +17,5 @@ export default async function AdminPage() {
     redirect('/');
   }
 
-  return <AdminClient user={user} />;
+  return <AdminDashboard user={user} />;
 }

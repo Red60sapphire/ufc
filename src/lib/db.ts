@@ -61,11 +61,13 @@ export async function initDb() {
     CREATE TABLE IF NOT EXISTS chat_messages (
       id SERIAL PRIMARY KEY,
       stream_id INTEGER NOT NULL REFERENCES streams(id) ON DELETE CASCADE,
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      guest_name TEXT,
       message TEXT NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `;
+  try { await queryRaw`ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS guest_name TEXT`; } catch {}
   await queryRaw`
     CREATE TABLE IF NOT EXISTS ufc_replays (
       id SERIAL PRIMARY KEY,
