@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, rawQueryOrThrow } from '@/lib/db';
 import { cookies } from 'next/headers';
+import { scrapeAll } from '@/lib/replay-scraper';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -27,6 +28,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const countRows = await rawQueryOrThrow('SELECT COUNT(*) as count FROM ufc_replays', []);
+    if (parseInt(countRows[0]?.count || '0') === 0) {
+      scrapeAll().catch(() => {});
+    }
+
     const conditions: string[] = [];
     const params: any[] = [];
     let idx = 1;
