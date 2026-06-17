@@ -15,7 +15,7 @@ export default function ReplaysPage() {
   const fetchReplays = async (s: string, sortBy: string) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ sort: sortBy, limit: '100' });
+      const params = new URLSearchParams({ sort: sortBy, limit: '200' });
       if (s) params.set('search', s);
       const res = await fetch(`/api/replays?${params}`);
       const data = await res.json();
@@ -37,7 +37,7 @@ export default function ReplaysPage() {
         <div className="max-w-[1400px] mx-auto px-3 md:px-6">
           <div className="flex items-center gap-3 h-14">
             <div className="bg-[#d20a0a] text-white text-[11px] font-bold uppercase px-2.5 py-1 rounded flex-shrink-0 tracking-wider">
-              mmareplayfull
+              MMA REPLAYS
             </div>
             <form onSubmit={handleSearch} className="flex-1 max-w-lg">
               <div className="relative">

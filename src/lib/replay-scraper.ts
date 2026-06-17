@@ -117,7 +117,7 @@ function getFighterImg(participant: FightParticipant): string {
   return '';
 }
 
-export async function scrapeAll(eventLimit = 3): Promise<{
+export async function scrapeAll(eventLimit = 10): Promise<{
   events: number;
   fights: number;
   newFights: number;

@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   const sort = searchParams.get('sort') || 'newest';
   const featured = searchParams.get('featured');
   const admin = searchParams.get('admin');
-  const limit = parseInt(searchParams.get('limit') || '50');
+  const limit = parseInt(searchParams.get('limit') || '200');
   const offset = parseInt(searchParams.get('offset') || '0');
 
   if (id) {
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     const forceScrape = searchParams.get('force') === '1';
     const countRows = await query`SELECT COUNT(*) as count FROM ufc_replays`;
     if (forceScrape || (countRows.length === 0 || parseInt(countRows[0]?.count || '0') === 0)) {
-      const limit = forceScrape ? 3 : 2;
+      const limit = forceScrape ? 10 : 3;
       const result = await scrapeAll(limit);
       if (result.errors.length > 0) {
         console.error('Auto-scrape errors:', JSON.stringify(result.errors.slice(0, 5)));
