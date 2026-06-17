@@ -30,8 +30,9 @@ export async function GET(request: NextRequest) {
   try {
     const forceScrape = searchParams.get('force') === '1';
     const countRows = await query`SELECT COUNT(*) as count FROM ufc_replays`;
-    if (forceScrape || (countRows.length === 0 || parseInt(countRows[0]?.count || '0') === 0)) {
-      const limit = forceScrape ? 10 : 3;
+    const currentCount = countRows.length > 0 ? parseInt(countRows[0]?.count || '0') : 0;
+    if (forceScrape || currentCount < 200) {
+      const limit = forceScrape ? 10 : (currentCount < 30 ? 10 : 5);
       const result = await scrapeAll(limit);
       if (result.errors.length > 0) {
         console.error('Auto-scrape errors:', JSON.stringify(result.errors.slice(0, 5)));
