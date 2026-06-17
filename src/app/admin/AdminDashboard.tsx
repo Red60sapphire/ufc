@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, FormEvent } from 'react';
+import VideoUploader from '@/components/VideoUploader';
 
 interface Stats {
   users: number;
@@ -432,7 +433,12 @@ function ReplaysTab({ replays, onRefresh }: { replays: Replay[]; onRefresh: () =
             <Input label="Fighter 1 Image URL" value={form.fighter1_img} onChange={(v) => setForm({...form, fighter1_img: v})} />
             <Input label="Fighter 2 Image URL" value={form.fighter2_img} onChange={(v) => setForm({...form, fighter2_img: v})} />
             <Input label="Thumbnail URL" value={form.thumbnail} onChange={(v) => setForm({...form, thumbnail: v})} placeholder="Landscape 16:9 image" />
-            <Input label="Video URL" value={form.video_url} onChange={(v) => setForm({...form, video_url: v})} required placeholder="MP4 / HLS / YouTube" />
+            <div className="md:col-span-2 lg:col-span-3">
+              <VideoUploader onUpload={(url) => setForm({...form, video_url: url})} currentUrl={form.video_url} />
+              <div className="mt-2">
+                <Input label="Or enter URL manually" value={form.video_url} onChange={(v) => setForm({...form, video_url: v})} placeholder="MP4 / HLS (.m3u8) / YouTube URL" />
+              </div>
+            </div>
             <Input label="Weight Class" value={form.weight_class} onChange={(v) => setForm({...form, weight_class: v})} />
             <Input label="Result" value={form.result} onChange={(v) => setForm({...form, result: v})} placeholder="e.g. KO Round 2" />
             <Input label="Duration" value={form.duration} onChange={(v) => setForm({...form, duration: v})} placeholder="e.g. 14:32" />
