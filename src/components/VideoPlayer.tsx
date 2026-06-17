@@ -10,63 +10,59 @@ interface VideoPlayerProps {
 
 export default function VideoPlayer({ src, poster, className = '' }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [isHls, setIsHls] = useState(false);
   const [error, setError] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
-  const videoSrc = src?.includes('api.mmareplayfull.com') && !src.includes('/api/video-proxy')
-    ? `/api/video-proxy?url=${encodeURIComponent(src)}`
-    : src;
+  const needsProxy = src && !src.includes('/api/video-proxy') && (src.includes('mmareplayfull.com') || src.includes('portal.portalmma.cc'));
+  const videoSrc = needsProxy ? `/api/video-proxy?url=${encodeURIComponent(src)}` : src;
+
+  const isHls = !!(videoSrc && (videoSrc.includes('.m3u8') || videoSrc.includes('/play/clip/') || videoSrc.includes('/play/file/') || videoSrc.includes('/play/seg') || videoSrc.includes('/api/video-proxy')));
 
   useEffect(() => {
-    if (!videoSrc) return;
-    const isHlsStream = videoSrc.includes('.m3u8') || videoSrc.includes('/play/clip/') || videoSrc.includes('/play/file/') || videoSrc.includes('/play/seg') || videoSrc.includes('/api/video-proxy');
-    setIsHls(isHlsStream);
+    if (!isHls || !videoSrc) return;
     setError(false);
     setLoaded(false);
 
-    if (isHlsStream) {
-      let hlsInstance: any = null;
+    let hlsInstance: any = null;
 
-      const initHls = () => {
-        if ((window as any).Hls && videoRef.current) {
-          if ((window as any).Hls.isSupported()) {
-            hlsInstance = new (window as any).Hls();
-            hlsInstance.loadSource(videoSrc);
-            hlsInstance.attachMedia(videoRef.current);
-            hlsInstance.on((window as any).Hls.Events.MANIFEST_PARSED, () => {
-              setLoaded(true);
-              videoRef.current?.play().catch(() => {});
-            });
-            hlsInstance.on((window as any).Hls.Events.ERROR, (event: any, data: any) => {
-              if (data.fatal) {
-                setError(true);
-              }
-            });
-          } else {
-            setError(true);
-          }
+    const initHls = () => {
+      if ((window as any).Hls && videoRef.current) {
+        if ((window as any).Hls.isSupported()) {
+          hlsInstance = new (window as any).Hls();
+          hlsInstance.loadSource(videoSrc);
+          hlsInstance.attachMedia(videoRef.current);
+          hlsInstance.on((window as any).Hls.Events.MANIFEST_PARSED, () => {
+            setLoaded(true);
+            videoRef.current?.play().catch(() => {});
+          });
+          hlsInstance.on((window as any).Hls.Events.ERROR, (_event: any, data: any) => {
+            if (data.fatal) {
+              setError(true);
+            }
+          });
+        } else {
+          setError(true);
         }
-      };
-
-      if ((window as any).Hls) {
-        initHls();
-      } else {
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/hls.js@latest';
-        script.async = true;
-        script.onload = initHls;
-        script.onerror = () => setError(true);
-        document.body.appendChild(script);
       }
+    };
 
-      return () => {
-        if (hlsInstance) {
-          hlsInstance.destroy();
-        }
-      };
+    if ((window as any).Hls) {
+      initHls();
+    } else {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/hls.js@latest';
+      script.async = true;
+      script.onload = initHls;
+      script.onerror = () => setError(true);
+      document.body.appendChild(script);
     }
-  }, [videoSrc]);
+
+    return () => {
+      if (hlsInstance) {
+        hlsInstance.destroy();
+      }
+    };
+  }, [isHls, videoSrc]);
 
   const isYouTube = src?.includes('youtube.com') || src?.includes('youtu.be');
 
@@ -100,6 +96,14 @@ export default function VideoPlayer({ src, poster, className = '' }: VideoPlayer
             <span className="text-xs">Failed to load video</span>
           </div>
         )}
+      </div>
+    );
+  }
+
+  if (!videoSrc) {
+    return (
+      <div className={`relative aspect-video bg-black rounded-2xl overflow-hidden ${className}`}>
+        <div className="absolute inset-0 flex items-center justify-center text-gray-500 text-xs">No video source</div>
       </div>
     );
   }
