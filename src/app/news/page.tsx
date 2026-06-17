@@ -4,44 +4,76 @@ export default async function NewsPage() {
   const news = await getNewsWithFallback(20);
 
   return (
-    <div className="bg-[#0a0a0a] min-h-screen">
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <h1 className="text-white text-2xl font-bold uppercase tracking-wider mb-6">UFC News</h1>
+    <div className="bg-[#0a0a0a] min-h-screen pt-16">
+      <div className="border-b border-gray-800/50 bg-gradient-to-r from-ufc-red/5 to-transparent">
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          <h1 className="text-white text-xl md:text-2xl font-bold uppercase tracking-wider">UFC News</h1>
+          <p className="text-gray-500 text-sm mt-1">Latest stories and updates from the octagon</p>
+        </div>
+      </div>
 
+      <div className="max-w-7xl mx-auto px-4 py-8">
         {news.length === 0 ? (
-          <p className="text-gray-400 text-sm">No news articles available.</p>
+          <div className="text-center py-20">
+            <svg className="w-16 h-16 text-gray-800 mx-auto mb-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+            </svg>
+            <p className="text-gray-500 text-sm">No news articles available.</p>
+          </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {news[0] && (
-              <div className="lg:col-span-2 bg-[#111] border border-gray-800 rounded-lg overflow-hidden group">
-                <div className="h-64 bg-gray-800">
-                  <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center text-gray-600">
-                    {news[0].image ? (
-                      <img src={news[0].image} alt={news[0].title} className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-4xl font-bold">UFC</span>
-                    )}
-                  </div>
+              <div className="lg:col-span-2 bg-gradient-to-b from-[#1a1a1a] to-[#111] border border-gray-800 rounded-2xl overflow-hidden card-hover group">
+                <div className="h-64 bg-gray-800 relative overflow-hidden">
+                  {news[0].image ? (
+                    <img src={news[0].image} alt={news[0].title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
+                      <div className="text-center">
+                        <svg className="w-16 h-16 text-gray-700 mx-auto mb-2" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M2 5a2 2 0 012-2h8a2 2 0 012 2v10a2 2 0 002 2H4a2 2 0 01-2-2V5zm3 1h6v4H5V6zm6 6H5v2h6v-2z" clipRule="evenodd" />
+                        </svg>
+                        <span className="text-gray-700 text-sm uppercase tracking-wider">UFC News</span>
+                      </div>
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                 </div>
                 <div className="p-6">
-                  <h2 className="text-white text-xl font-bold group-hover:text-ufc-red transition">{news[0].title}</h2>
-                  <p className="text-gray-400 text-sm mt-2">{news[0].description}</p>
-                  <p className="text-gray-600 text-xs mt-3">{news[0].date} • {news[0].source}</p>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-[10px] bg-ufc-red/10 text-ufc-red px-2 py-0.5 rounded-full uppercase font-semibold">Featured</span>
+                    <span className="text-gray-600 text-[10px]">{news[0].date}</span>
+                  </div>
+                  <h2 className="text-white text-lg font-bold group-hover:text-ufc-red transition-colors leading-relaxed">{news[0].title}</h2>
+                  {news[0].description && (
+                    <p className="text-gray-400 text-sm mt-2 leading-relaxed">{news[0].description}</p>
+                  )}
+                  <p className="text-gray-600 text-xs mt-3">{news[0].source}</p>
                 </div>
               </div>
             )}
 
             <div className="space-y-4">
               {news.slice(1).map((item) => (
-                <div key={item.id} className="bg-[#111] border border-gray-800 rounded-lg p-4 group hover:border-gray-600 transition">
+                <div key={item.id} className="bg-gradient-to-b from-[#1a1a1a] to-[#111] border border-gray-800 rounded-xl p-4 card-hover group">
                   <div className="flex gap-3">
-                    <div className="w-16 h-16 bg-gray-800 rounded flex-shrink-0 overflow-hidden">
-                      <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center text-gray-600 text-xs">UFC</div>
+                    <div className="w-16 h-16 bg-gray-800 rounded-xl flex-shrink-0 overflow-hidden">
+                      {item.image ? (
+                        <img src={item.image} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
+                          <svg className="w-6 h-6 text-gray-700" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M2 5a2 2 0 012-2h8a2 2 0 012 2v10a2 2 0 002 2H4a2 2 0 01-2-2V5zm3 1h6v4H5V6zm6 6H5v2h6v-2z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-white text-sm font-semibold group-hover:text-ufc-red transition line-clamp-2">{item.title}</h3>
-                      <p className="text-gray-500 text-xs mt-1 line-clamp-2">{item.description}</p>
-                      <p className="text-gray-600 text-[10px] mt-1">{item.date}</p>
+                      <h3 className="text-white text-sm font-semibold group-hover:text-ufc-red transition-colors line-clamp-2 leading-relaxed">{item.title}</h3>
+                      {item.description && (
+                        <p className="text-gray-500 text-xs mt-1 line-clamp-2 leading-relaxed">{item.description}</p>
+                      )}
+                      <p className="text-gray-600 text-[10px] mt-1.5">{item.date}</p>
                     </div>
                   </div>
                 </div>

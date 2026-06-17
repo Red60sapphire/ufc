@@ -1,16 +1,25 @@
 import { ufcConfig } from './ufc-config';
 
-interface ESPNEvent {
+export interface ESPNEvent {
   id: string;
   name: string;
   date: string;
   venue?: string;
   location?: string;
   status?: string;
+  statusState?: string;
+  fighter1?: string;
+  fighter2?: string;
+  fighter1Record?: string;
+  fighter2Record?: string;
+  fighter1Img?: string;
+  fighter2Img?: string;
+  broadcast?: string;
+  weightClass?: string;
   fights?: any[];
 }
 
-interface ESPNNews {
+export interface ESPNNews {
   id: string;
   title: string;
   description?: string;
@@ -20,12 +29,14 @@ interface ESPNNews {
   url?: string;
 }
 
-interface ESPNAthlete {
+export interface ESPNAthlete {
   id: string;
   name: string;
+  nickname?: string;
   record?: string;
   height?: string;
   weight?: string;
+  weightClass?: string;
   reach?: string;
   stance?: string;
   age?: number;
@@ -34,9 +45,23 @@ interface ESPNAthlete {
   image?: string;
 }
 
+export interface ESPNRankEntry {
+  rank: number;
+  trend: string;
+  athleteId: string;
+  athlete?: ESPNAthlete;
+}
+
+export interface ESPNRankingGroup {
+  id: string;
+  name: string;
+  ranks: ESPNRankEntry[];
+}
+
 const CACHE_TTL = 600;
 const ESP_BASE = 'https://site.api.espn.com/apis/site/v2/sports/mma/ufc';
-const CORE_API = 'https://sports.core.api.espn.com/v2/sports/mma/athletes';
+const CORE_BASE = 'https://sports.core.api.espn.com/v2/sports/mma';
+const LEAGUE_BASE = `${CORE_BASE}/leagues/ufc`;
 
 function getCached(key: string): any | null {
   try {
@@ -86,37 +111,61 @@ async function espnFetch(url: string): Promise<any> {
   }
 }
 
+function buildHeadshotUrl(athleteId: string) {
+  return `https://a.espncdn.com/i/headshots/mma/players/full/${athleteId}.png`;
+}
+
+function getCompRecord(competitor: any): string {
+  return competitor?.records?.[0]?.summary || 'N/A';
+}
+
+function mapCompetition(c: any) {
+  const f1 = c?.competitors?.[0]?.athlete;
+  const f2 = c?.competitors?.[1]?.athlete;
+  return {
+    id: c.id,
+    order: c.order || 0,
+    fighter1: f1?.displayName || 'TBD',
+    fighter2: f2?.displayName || 'TBD',
+    fighter1Record: getCompRecord(c?.competitors?.[0]),
+    fighter2Record: getCompRecord(c?.competitors?.[1]),
+    fighter1Img: f1?.id ? buildHeadshotUrl(f1.id) : undefined,
+    fighter2Img: f2?.id ? buildHeadshotUrl(f2.id) : undefined,
+    fighter1Id: f1?.id,
+    fighter2Id: f2?.id,
+    weightClass: c.type?.abbreviation || c.description || '',
+    broadcast: c.broadcast || c.broadcasts?.[0]?.names?.[0],
+    status: c.status?.type?.description,
+    statusState: c.status?.type?.state,
+  };
+}
+
 export async function getUpcomingEvents(limit = 6): Promise<ESPNEvent[]> {
   try {
     const data = await espnFetch(`${ESP_BASE}/scoreboard`);
-    const events = data?.events || [];
-    return events.slice(0, limit).map((e: any) => {
-      const c = e.competitions?.[0];
-      const f1 = c?.competitors?.[0]?.athlete;
-      const f2 = c?.competitors?.[1]?.athlete;
+    const apiEvents = data?.events || [];
+    return apiEvents.slice(0, limit).map((e: any) => {
+      const comps = e.competitions || [];
+      const mainFight = comps[comps.length - 1];
+      const f1 = mainFight?.competitors?.[0]?.athlete;
+      const f2 = mainFight?.competitors?.[1]?.athlete;
       return {
         id: e.id,
         name: e.name,
         date: e.date,
-        venue: c?.venue?.fullName,
-        location: `${c?.venue?.address?.city || ''}, ${c?.venue?.address?.state || ''}`.replace(/^,\s*$/, ''),
-        status: c?.status?.type?.description,
+        venue: e.venues?.[0]?.fullName || comps[0]?.venue?.fullName,
+        location: e.venues?.[0]?.address ? `${e.venues[0].address.city || ''}, ${e.venues[0].address.state || ''}`.replace(/^,\s*$/, '') : comps[0]?.venue?.address ? `${comps[0].venue.address.city || ''}, ${comps[0].venue.address.state || ''}`.replace(/^,\s*$/, '') : '',
+        status: mainFight?.status?.type?.description,
+        statusState: mainFight?.status?.type?.state,
+        broadcast: mainFight?.broadcast || mainFight?.broadcasts?.[0]?.names?.[0],
         fighter1: f1?.displayName,
         fighter2: f2?.displayName,
-        fighter1Record: c?.competitors?.[0]?.record,
-        fighter2Record: c?.competitors?.[1]?.record,
-        fighter1Img: f1?.id ? `https://a.espncdn.com/i/headshots/mma/players/full/${f1.id}.png` : undefined,
-        fighter2Img: f2?.id ? `https://a.espncdn.com/i/headshots/mma/players/full/${f2.id}.png` : undefined,
-        fights: e.competitions?.map((c: any) => ({
-          id: c.id,
-          fighter1: c.competitors?.[0]?.athlete?.displayName,
-          fighter2: c.competitors?.[1]?.athlete?.displayName,
-          fighter1Record: c.competitors?.[0]?.record,
-          fighter2Record: c.competitors?.[1]?.record,
-          fighter1Img: c.competitors?.[0]?.athlete?.id ? `https://a.espncdn.com/i/headshots/mma/players/full/${c.competitors[0].athlete.id}.png` : undefined,
-          fighter2Img: c.competitors?.[1]?.athlete?.id ? `https://a.espncdn.com/i/headshots/mma/players/full/${c.competitors[1].athlete.id}.png` : undefined,
-          weightClass: c.weightClass || c.description,
-        })),
+        fighter1Record: getCompRecord(mainFight?.competitors?.[0]),
+        fighter2Record: getCompRecord(mainFight?.competitors?.[1]),
+        fighter1Img: f1?.id ? buildHeadshotUrl(f1.id) : undefined,
+        fighter2Img: f2?.id ? buildHeadshotUrl(f2.id) : undefined,
+        weightClass: mainFight?.type?.abbreviation || mainFight?.description,
+        fights: comps.map(mapCompetition),
       };
     });
   } catch {
@@ -130,22 +179,13 @@ export async function getFightCard(eventId: string): Promise<{ main: any[]; prel
     const event = data?.events?.find((e: any) => e.id === eventId);
     if (!event?.competitions) return { main: [], prelims: [], early: [] };
 
-    const competitions = [...event.competitions].reverse();
-    const fights = competitions.map((c: any) => ({
-      id: c.id,
-      fighter1: c.competitors?.[0]?.athlete?.displayName || 'TBD',
-      fighter2: c.competitors?.[1]?.athlete?.displayName || 'TBD',
-      fighter1Record: c.competitors?.[0]?.record || 'N/A',
-      fighter2Record: c.competitors?.[1]?.record || 'N/A',
-      fighter1Img: c.competitors?.[0]?.athlete?.id ? `https://a.espncdn.com/i/headshots/mma/players/full/${c.competitors[0].athlete.id}.png` : undefined,
-      fighter2Img: c.competitors?.[1]?.athlete?.id ? `https://a.espncdn.com/i/headshots/mma/players/full/${c.competitors[1].athlete.id}.png` : undefined,
-      weightClass: c.description || c.weightClass || '',
-    }));
+    const sorted = [...event.competitions].sort((a: any, b: any) => (a.order || 0) - (b.order || 0));
+    const fights = sorted.map(mapCompetition);
 
     return {
-      main: fights.slice(0, 5),
-      prelims: fights.slice(5, 9),
-      early: fights.slice(9),
+      main: fights.slice(-5).reverse(),
+      prelims: fights.slice(-9, -5).reverse(),
+      early: fights.slice(0, -9).reverse(),
     };
   } catch {
     return { main: [], prelims: [], early: [] };
@@ -154,16 +194,16 @@ export async function getFightCard(eventId: string): Promise<{ main: any[]; prel
 
 export async function getLatestNews(limit = 5): Promise<ESPNNews[]> {
   try {
-    const data = await espnFetch(`${ESP_BASE}/news`);
+    const data = await espnFetch(`${ESP_BASE}/news?limit=${limit}`);
     const articles = data?.articles || [];
     return articles.slice(0, limit).map((a: any) => ({
       id: a.id || String(Math.random()),
       title: a.headline || a.title,
       description: a.description,
-      image: a.images?.[0]?.url,
+      image: a.images?.[0]?.url || a.images?.[0]?.href,
       date: a.published || a.date,
       source: a.source || 'ESPN',
-      url: a.links?.web?.href,
+      url: a.links?.web?.href || a.links?.web,
     }));
   } catch {
     return [];
@@ -172,23 +212,79 @@ export async function getLatestNews(limit = 5): Promise<ESPNNews[]> {
 
 export async function getAthlete(id: string): Promise<ESPNAthlete | null> {
   try {
-    const data = await espnFetch(`${CORE_API}/${id}`);
+    const data = await espnFetch(`${CORE_BASE}/athletes/${id}`);
+    let record = 'N/A';
+    try {
+      const recordsData = await espnFetch(`${CORE_BASE}/athletes/${id}/records`);
+      record = recordsData?.items?.[0]?.summary || `${data.record?.wins || 0}-${data.record?.losses || 0}-${data.record?.draws || 0}`;
+    } catch {}
+
     return {
       id: data.id,
       name: data.displayName || data.fullName,
-      record: `${data.record?.wins || 0}-${data.record?.losses || 0}-${data.record?.draws || 0}`,
-      height: data.height,
-      weight: data.weight,
-      reach: data.reach,
-      stance: data.stance,
+      nickname: data.nickname,
+      record,
+      height: data.displayHeight,
+      weight: data.displayWeight,
+      weightClass: data.weightClass?.text,
+      reach: data.displayReach,
+      stance: data.stance?.text,
       age: data.age,
-      country: data.country?.displayName,
-      flag: data.country?.flag,
-      image: `https://a.espncdn.com/i/headshots/mma/players/full/${id}.png`,
+      country: data.citizenship || data.country?.displayName,
+      flag: data.flag?.href,
+      image: data.headshot?.href || buildHeadshotUrl(id),
     };
   } catch {
     return null;
   }
+}
+
+export async function getRankings(): Promise<ESPNRankingGroup[]> {
+  try {
+    const list = await espnFetch(`${LEAGUE_BASE}/rankings`);
+    const refs: { url: string; name: string }[] = (list?.items || []).map((item: any) => ({
+      url: item.$ref,
+      name: item.$ref.split('/').pop()?.split('?')[0] || '',
+    }));
+
+    const groups = await Promise.all(
+      refs.map(async (ref) => {
+        try {
+          const data = await espnFetch(ref.url);
+          if (!data?.ranks) return null;
+          const ranks = data.ranks.slice(0, 15).map((r: any) => ({
+            rank: r.current,
+            trend: r.trend || '-',
+            athleteId: r.athlete?.$ref?.split('/').pop()?.split('?')[0] || '',
+          }));
+          return { id: data.id, name: data.shortName || data.name, ranks } as ESPNRankingGroup;
+        } catch {
+          return null;
+        }
+      })
+    );
+
+    return groups.filter(Boolean) as ESPNRankingGroup[];
+  } catch {
+    return [];
+  }
+}
+
+export async function getRankingsWithAthletes(): Promise<ESPNRankingGroup[]> {
+  const groups = await getRankings();
+  const enriched = await Promise.all(
+    groups.map(async (group) => {
+      const athletes = await Promise.all(
+        group.ranks.map(async (entry) => {
+          if (!entry.athleteId) return { ...entry, athlete: undefined };
+          const athlete = await getAthlete(entry.athleteId);
+          return { ...entry, athlete: athlete || undefined };
+        })
+      );
+      return { ...group, ranks: athletes };
+    })
+  );
+  return enriched;
 }
 
 export async function getEventsWithFightCards(limit = 6): Promise<ESPNEvent[]> {
@@ -209,6 +305,12 @@ export async function getEventsWithFightCards(limit = 6): Promise<ESPNEvent[]> {
     venue: config.venue,
     location: 'Las Vegas, Nevada',
     status: 'Upcoming',
+    fighter1: config.main_event.fighter1,
+    fighter2: config.main_event.fighter2,
+    fighter1Record: config.main_event.fighter1_record,
+    fighter2Record: config.main_event.fighter2_record,
+    fighter1Img: config.main_event.fighter1_img,
+    fighter2Img: config.main_event.fighter2_img,
     fights: config.fight_card.main.map((f, i) => ({
       ...f, id: String(i),
       fighter1Img: `https://a.espncdn.com/i/headshots/mma/players/full/${i + 1}.png`,

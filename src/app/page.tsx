@@ -34,12 +34,12 @@ export default async function HomePage() {
   };
 
   return (
-    <div className="bg-[#0a0a0a] min-h-screen">
-      <div className="bg-gradient-to-r from-ufc-red/10 to-transparent text-center py-2">
-        <span className="text-ufc-red text-xs uppercase tracking-widest font-semibold">FREE UFC STREAMS - WATCH LIVE</span>
+    <div className="bg-[#0a0a0a] min-h-screen pt-16">
+      <div className="bg-gradient-to-r from-ufc-red/5 via-ufc-red/[0.02] to-transparent text-center py-2 border-b border-gray-800/30">
+        <span className="text-ufc-red text-[10px] md:text-xs uppercase tracking-[0.2em] font-semibold">FREE UFC STREAMS - WATCH LIVE</span>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-6 space-y-8">
+      <div className="max-w-7xl mx-auto px-4 py-8 space-y-10">
         <HeroSection mainEvent={mainEvent} />
 
         <FightCardPanel fights={fights} />
@@ -64,32 +64,45 @@ export default async function HomePage() {
 
 function FighterCard({ fighter }: { fighter: any }) {
   return (
-    <div className="bg-[#111] border border-gray-800 rounded-lg p-4">
-      <h3 className="text-ufc-red text-sm uppercase tracking-wider font-semibold mb-3">Featured Fighter</h3>
-      <div className="flex items-center gap-4">
-        <div className="w-20 h-20 rounded-full bg-gray-800 overflow-hidden flex-shrink-0">
-          <div className="w-full h-full bg-gradient-to-br from-ufc-red/30 to-gray-800 flex items-center justify-center text-2xl font-bold text-gray-500">
-            {fighter.name.charAt(0)}
-          </div>
-        </div>
-        <div>
-          <h4 className="text-white text-lg font-bold">{fighter.name}</h4>
-          {fighter.nickname && <p className="text-gray-400 text-xs">&quot;{fighter.nickname}&quot;</p>}
-          <p className="text-gray-500 text-xs mt-1">{fighter.weight_class} • {fighter.flag} {fighter.country}</p>
-        </div>
+    <div className="bg-gradient-to-b from-[#1a1a1a] to-[#111] border border-gray-800 rounded-xl overflow-hidden card-hover">
+      <div className="bg-gradient-to-r from-ufc-red/10 to-transparent px-4 py-3 border-b border-gray-800">
+        <h3 className="text-ufc-red text-xs uppercase tracking-wider font-semibold">Featured Fighter</h3>
       </div>
-      <div className="grid grid-cols-2 gap-3 mt-4 text-center">
-        {[
-          { label: 'Record', value: fighter.record },
-          { label: 'Height', value: fighter.height },
-          { label: 'Reach', value: fighter.reach },
-          { label: 'Stance', value: fighter.stance },
-        ].map((stat) => (
-          <div key={stat.label} className="bg-[#1a1a1a] rounded p-2">
-            <p className="text-gray-500 text-xs uppercase">{stat.label}</p>
-            <p className="text-white text-sm font-semibold">{stat.value}</p>
+      <div className="p-5">
+        <div className="flex items-center gap-4">
+          <div className="relative w-20 h-20 rounded-full overflow-hidden flex-shrink-0 ring-2 ring-gray-700">
+            {fighter.image ? (
+              <img src={fighter.image} alt={fighter.name} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-ufc-red/30 to-gray-800 flex items-center justify-center text-2xl font-bold text-white">
+                {fighter.name.charAt(0)}
+              </div>
+            )}
+            <div className="absolute inset-0 rounded-full ring-1 ring-white/10" />
           </div>
-        ))}
+          <div>
+            <h4 className="text-white text-lg font-bold">{fighter.name}</h4>
+            {fighter.nickname && <p className="text-ufc-gold text-xs">&ldquo;{fighter.nickname}&rdquo;</p>}
+            <p className="text-gray-500 text-xs mt-1 flex items-center gap-1">
+              <span>{fighter.weight_class}</span>
+              <span className="text-gray-700">•</span>
+              <span>{fighter.flag} {fighter.country}</span>
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 mt-5">
+          {[
+            { label: 'Record', value: fighter.record },
+            { label: 'Height', value: fighter.height },
+            { label: 'Reach', value: fighter.reach },
+            { label: 'Stance', value: fighter.stance },
+          ].map((stat) => (
+            <div key={stat.label} className="bg-white/[0.03] border border-gray-800/50 rounded-lg p-3 text-center hover:bg-white/[0.05] transition-colors">
+              <p className="text-gray-500 text-[10px] uppercase tracking-wider">{stat.label}</p>
+              <p className="text-white text-sm font-bold mt-0.5">{stat.value}</p>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

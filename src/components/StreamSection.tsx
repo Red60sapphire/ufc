@@ -38,25 +38,36 @@ export default function StreamSection({ streams }: { streams: Stream[] }) {
 
   return (
     <div>
+      <div className="flex items-center gap-3 mb-5">
+        <div className="h-4 w-1 bg-ufc-red rounded-full" />
+        <h2 className="text-white text-sm uppercase tracking-wider font-bold">Live Streams</h2>
+        {activeStream?.is_live ? (
+          <span className="live-badge bg-ufc-red text-white text-[10px] px-2 py-0.5 rounded-full uppercase font-bold text-[10px]">LIVE</span>
+        ) : null}
+      </div>
+
       {streams.length > 1 && (
-        <div className="flex gap-2 mb-4 overflow-x-auto scrollbar-hide">
+        <div className="flex gap-2 mb-4 overflow-x-auto scrollbar-hide pb-1">
           {streams.map((s) => (
             <button
               key={s.id}
               onClick={() => setActiveStream(s)}
-              className={`flex-shrink-0 px-3 py-1.5 text-xs uppercase tracking-wider rounded transition ${
-                activeStream?.id === s.id ? 'bg-ufc-red text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+              className={`flex-shrink-0 px-4 py-2 text-xs uppercase tracking-wider rounded-full transition-all duration-300 ${
+                activeStream?.id === s.id
+                  ? 'bg-ufc-red text-white shadow-lg shadow-red-900/30'
+                  : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border border-gray-800'
               }`}
             >
-              {s.is_live ? '🔴 ' : ''}{s.title}
+              {s.is_live && <span className="mr-1.5 inline-block w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />}
+              {s.title}
             </button>
           ))}
         </div>
       )}
 
       {activeStream && (
-        <div className="bg-[#111] border border-gray-800 rounded-lg overflow-hidden">
-          <div className="aspect-video bg-black">
+        <div className="bg-gradient-to-b from-[#1a1a1a] to-[#111] border border-gray-800 rounded-2xl overflow-hidden card-hover">
+          <div className="relative aspect-video bg-black">
             {isEmbed(activeStream.video_url) ? (
               <iframe
                 src={getEmbedUrl(activeStream.video_url)}
@@ -72,20 +83,33 @@ export default function StreamSection({ streams }: { streams: Stream[] }) {
                 poster={activeStream.thumbnail_url || undefined}
               />
             )}
-          </div>
-          <div className="p-4">
-            <div className="flex items-center gap-2 mb-2">
-              {activeStream.is_live ? (
-                <span className="live-badge bg-ufc-red text-white text-[10px] px-2 py-0.5 rounded uppercase font-bold">Live</span>
-              ) : (
-                <span className="bg-gray-700 text-gray-400 text-[10px] px-2 py-0.5 rounded uppercase">Offline</span>
-              )}
-              <h3 className="text-white text-sm font-bold">{activeStream.title}</h3>
-            </div>
-            {activeStream.description && (
-              <p className="text-gray-400 text-xs">{activeStream.description}</p>
+            {activeStream.is_live && (
+              <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-black/70 text-white text-[10px] px-2.5 py-1 rounded-full backdrop-blur-sm">
+                <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                LIVE
+              </div>
             )}
-            <p className="text-gray-600 text-xs mt-1">Stream by {activeStream.username}</p>
+          </div>
+          <div className="p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-white text-base font-bold">{activeStream.title}</h3>
+                {activeStream.description && (
+                  <p className="text-gray-400 text-xs mt-1">{activeStream.description}</p>
+                )}
+              </div>
+              {activeStream.is_live ? (
+                <span className="live-badge bg-ufc-red text-white text-[10px] px-2.5 py-1 rounded-full uppercase font-bold flex-shrink-0 ml-3">Live</span>
+              ) : (
+                <span className="bg-gray-700 text-gray-400 text-[10px] px-2.5 py-1 rounded-full uppercase flex-shrink-0 ml-3">Offline</span>
+              )}
+            </div>
+            <p className="text-gray-600 text-[10px] mt-3 flex items-center gap-1">
+              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" />
+              </svg>
+              Stream by {activeStream.username}
+            </p>
           </div>
         </div>
       )}
