@@ -61,17 +61,20 @@ function extractNextData(html: string): any {
   return JSON.parse(match[1]);
 }
 
-async function fetchEvents(): Promise<MEvent[]> {
+async function fetchEvents(limit = 3): Promise<MEvent[]> {
   const html = await fetchPage(BASE);
   const data = extractNextData(html);
   const latestEvents: any[] = data?.props?.pageProps?.latestEvents || [];
-  return latestEvents.map((e: any) => ({
-    id: e.id,
-    name: e.name,
-    date: e.date,
-    location: e.location || '',
-    cover_url: e.cover_url ? `https://api.mmareplayfull.com${e.cover_url.replace('/cover_art', '/cover_art')}` : '',
-  }));
+  return latestEvents
+    .filter((e: any) => e.is_video_available)
+    .slice(0, limit)
+    .map((e: any) => ({
+      id: e.id,
+      name: e.name,
+      date: e.date,
+      location: e.location || '',
+      cover_url: e.cover_url ? `https://api.mmareplayfull.com${e.cover_url.replace('/cover_art', '/cover_art')}` : '',
+    }));
 }
 
 function buildEventSlug(event: MEvent): string {
@@ -114,7 +117,7 @@ function getFighterImg(participant: FightParticipant): string {
   return '';
 }
 
-export async function scrapeAll(): Promise<{
+export async function scrapeAll(eventLimit = 3): Promise<{
   events: number;
   fights: number;
   newFights: number;
@@ -126,7 +129,7 @@ export async function scrapeAll(): Promise<{
   let newFights = 0;
 
   try {
-    const events = await fetchEvents();
+    const events = await fetchEvents(eventLimit);
     totalEvents = events.length;
 
     for (const event of events) {
@@ -154,6 +157,17 @@ export async function scrapeAll(): Promise<{
 
             const clipUrl = `${API_BASE}${fight.clip.playlist_url}`;
             const videoUrl = `/api/video-proxy?url=${encodeURIComponent(clipUrl)}`;
+
+            const verify = await fetch(clipUrl, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Referer': 'https://mmareplayfull.com/',
+              },
+            });
+            if (!verify.ok) {
+              errors.push(`Skipping ${title}: clip returned ${verify.status}`);
+              continue;
+            }
 
             await rawQueryOrThrow(
               `INSERT INTO ufc_replays (title, slug, promotion, event_name, fighter1, fighter2, fighter1_img, fighter2_img, weight_class, result, duration, description, thumbnail, video_url, event_date, featured, published, views, created_at, updated_at)
