@@ -71,6 +71,7 @@ export default function AdminDashboard({ user }: { user: { id: number; username:
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    fetch('/api/init').catch(() => {});
     Promise.all([
       fetch('/api/admin/stats').then(r => r.json()),
       fetch('/api/streams').then(r => r.json()),
@@ -591,18 +592,27 @@ function AnnouncementsTab() {
     e.preventDefault();
     setError('');
     if (!message.trim()) { setError('Message is required'); return; }
-    const res = await fetch('/api/announcements', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, message, duration_minutes: durationMinutes, dismissible, persistent }),
-    });
-    const data = await res.json();
-    if (data.success) {
-      setTitle(''); setMessage(''); setDurationMinutes(60); setDismissible(true); setPersistent(false);
-      setShowAdd(false);
-      fetchAnnouncements();
-    } else {
-      setError(data.error || 'Failed');
+    try {
+      const res = await fetch('/api/announcements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, message, duration_minutes: durationMinutes, dismissible, persistent }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        setError(errData.error || `Server error (${res.status})`);
+        return;
+      }
+      const data = await res.json();
+      if (data.success) {
+        setTitle(''); setMessage(''); setDurationMinutes(60); setDismissible(true); setPersistent(false);
+        setShowAdd(false);
+        fetchAnnouncements();
+      } else {
+        setError(data.error || 'Failed');
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Network error - check console');
     }
   };
 

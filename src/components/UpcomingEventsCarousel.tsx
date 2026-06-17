@@ -17,7 +17,7 @@ export default function UpcomingEventsCarousel({ events }: { events: Event[] }) 
         <div className="h-4 w-1 bg-ufc-red rounded-full" />
         <h2 className="text-white text-sm uppercase tracking-wider font-bold">Upcoming Events</h2>
       </div>
-      <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-3">
+      <div className={`flex gap-4 pb-3 ${events.length === 1 ? 'justify-center' : 'overflow-x-auto scrollbar-hide'}`}>
         {events.map((event) => (
           <Link
             key={event.id}

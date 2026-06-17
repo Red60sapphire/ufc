@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 
-export default function HeadToHeadPage() {
+function HeadToHeadContent() {
+  const searchParams = useSearchParams();
   const [f1Id, setF1Id] = useState('');
   const [f2Id, setF2Id] = useState('');
   const [f1Data, setF1Data] = useState<any>(null);
@@ -16,6 +18,24 @@ export default function HeadToHeadPage() {
   const [loading2, setLoading2] = useState(false);
   const [showSearch1, setShowSearch1] = useState(false);
   const [showSearch2, setShowSearch2] = useState(false);
+
+  useEffect(() => {
+    const fighterName = decodeURIComponent(searchParams.get('fighter') || searchParams.get('f1') || '');
+    if (fighterName) {
+      setSearch1(fighterName);
+      fetch(`/api/fighters?search=${encodeURIComponent(fighterName)}`)
+        .then(r => r.json())
+        .then(d => {
+          const f = d.data?.[0];
+          if (f) {
+            setF1Id(f.id);
+            setF1Data(f);
+            setSearch1(f.name);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (search1.length < 2) { setResults1([]); return; }
@@ -107,11 +127,11 @@ export default function HeadToHeadPage() {
         </div>
 
         {f1Data && f2Data && (
-          <div className="space-y-8">
+          <div className="space-y-8 animate-in stagger-1">
             <div className="flex items-center justify-center gap-6 mb-8">
               <FighterAvatar athlete={f1Data} />
               <div className="text-center">
-                <div className="w-14 h-14 rounded-full bg-ufc-red/10 border-2 border-ufc-red/20 flex items-center justify-center mx-auto">
+                <div className="w-14 h-14 rounded-full bg-ufc-red/10 border-2 border-ufc-red/20 flex items-center justify-center animate-ring-pulse">
                   <span className="text-ufc-red text-lg font-black">VS</span>
                 </div>
                 <p className="text-gray-500 text-[10px] uppercase tracking-wider mt-1">Comparison</p>
@@ -119,7 +139,7 @@ export default function HeadToHeadPage() {
               <FighterAvatar athlete={f2Data} />
             </div>
 
-            <div className="bg-gradient-to-b from-[#1a1a1a] to-[#111] border border-gray-800 rounded-2xl overflow-hidden">
+            <div className="bg-gradient-to-b from-[#1a1a1a] to-[#111] border border-gray-800 rounded-2xl overflow-hidden card-hover">
               <div className="bg-gradient-to-r from-ufc-red/10 to-transparent px-6 py-4 border-b border-gray-800">
                 <h3 className="text-white text-xs uppercase tracking-wider font-bold text-center">Stat Comparison</h3>
               </div>
@@ -127,16 +147,25 @@ export default function HeadToHeadPage() {
                 {stats(f1Data).map((s, i) => {
                   const f1Val = s.value;
                   const f2Val = stats(f2Data)[i]?.value || 'N/A';
+                  const f1Num = parseFloat(f1Val);
+                  const f2Num = parseFloat(f2Val);
+                  const isNum = !isNaN(f1Num) && !isNaN(f2Num) && !['Record', 'Stance', 'Country', 'Weight Class'].includes(s.label);
                   return (
-                    <div key={s.label} className="grid grid-cols-3 gap-4 px-6 py-4 items-center hover:bg-white/[0.02] transition-colors">
+                    <div key={s.label} className="grid grid-cols-3 gap-4 px-6 py-4 items-center hover:bg-white/[0.02] transition-colors group">
                       <div className="text-right">
-                        <span className="text-white text-sm font-bold">{f1Val}</span>
+                        <span className={`text-sm font-bold ${isNum && f1Num > f2Num ? 'text-ufc-red' : 'text-white'}`}>{f1Val}</span>
                       </div>
                       <div className="text-center">
                         <span className="text-gray-500 text-[10px] uppercase tracking-wider font-semibold">{s.label}</span>
+                        {isNum && f1Num !== f2Num && (
+                          <div className="mt-1.5 flex items-center gap-1 justify-center">
+                            <div className={`h-1 rounded-full transition-all duration-500 ${f1Num > f2Num ? 'bg-ufc-red' : 'bg-gray-700'}`} style={{ width: `${Math.min(100, (f1Num / Math.max(f1Num, f2Num)) * 40)}px` }} />
+                            <div className={`h-1 rounded-full transition-all duration-500 ${f2Num > f1Num ? 'bg-ufc-red' : 'bg-gray-700'}`} style={{ width: `${Math.min(100, (f2Num / Math.max(f1Num, f2Num)) * 40)}px` }} />
+                          </div>
+                        )}
                       </div>
                       <div className="text-left">
-                        <span className="text-white text-sm font-bold">{f2Val}</span>
+                        <span className={`text-sm font-bold ${isNum && f2Num > f1Num ? 'text-ufc-red' : 'text-white'}`}>{f2Val}</span>
                       </div>
                     </div>
                   );
@@ -144,16 +173,17 @@ export default function HeadToHeadPage() {
               </div>
             </div>
 
-            <div className="text-center">
+            <div className="flex items-center justify-center gap-4">
               <Link
                 href={`/fighter/${f1Id}`}
-                className="inline-flex items-center gap-1 text-ufc-red text-xs hover:text-red-300 transition mr-4"
+                className="inline-flex items-center gap-1 text-ufc-red text-xs hover:text-red-300 transition border border-ufc-red/30 rounded-full px-4 py-2 hover:bg-ufc-red/10"
               >
                 {f1Data.name} profile →
               </Link>
+              <span className="text-gray-700 text-[10px]">|</span>
               <Link
                 href={`/fighter/${f2Id}`}
-                className="inline-flex items-center gap-1 text-ufc-red text-xs hover:text-red-300 transition ml-4"
+                className="inline-flex items-center gap-1 text-ufc-red text-xs hover:text-red-300 transition border border-ufc-red/30 rounded-full px-4 py-2 hover:bg-ufc-red/10"
               >
                 {f2Data.name} profile →
               </Link>
@@ -162,7 +192,7 @@ export default function HeadToHeadPage() {
         )}
 
         {!f1Data || !f2Data ? (
-          <div className="text-center py-16 bg-gradient-to-b from-[#1a1a1a] to-[#111] border border-gray-800 rounded-2xl">
+          <div className="text-center py-16 bg-gradient-to-b from-[#1a1a1a] to-[#111] border border-gray-800 rounded-2xl card-hover">
             <svg className="w-16 h-16 text-gray-800 mx-auto mb-4" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
             </svg>
@@ -171,6 +201,21 @@ export default function HeadToHeadPage() {
         ) : null}
       </div>
     </div>
+  );
+}
+
+export default function HeadToHeadPage() {
+  return (
+    <Suspense fallback={
+      <div className="bg-[#0a0a0a] min-h-screen pt-16 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-2 border-ufc-red border-t-transparent rounded-full animate-spin" />
+          <span className="text-gray-500 text-xs uppercase tracking-wider">Loading...</span>
+        </div>
+      </div>
+    }>
+      <HeadToHeadContent />
+    </Suspense>
   );
 }
 
@@ -188,16 +233,20 @@ function FighterSelector({ side, search, setSearch, results, loading, selected, 
 }) {
   return (
     <div className="relative">
-      <div className="bg-gradient-to-b from-[#1a1a1a] to-[#111] border border-gray-800 rounded-2xl p-5">
-        <p className="text-gray-500 text-[10px] uppercase tracking-wider font-semibold mb-3">
-          {side === 1 ? 'Fighter 1' : 'Fighter 2'}
-        </p>
+      <div className="bg-gradient-to-b from-[#1a1a1a] to-[#111] border border-gray-800 rounded-2xl p-5 card-hover">
+        <div className="flex items-center gap-2 mb-3">
+          <div className={`w-2 h-2 rounded-full ${side === 1 ? 'bg-ufc-red' : 'bg-ufc-gold'}`} />
+          <p className="text-gray-500 text-[10px] uppercase tracking-wider font-semibold">
+            {side === 1 ? 'Fighter 1' : 'Fighter 2'}
+          </p>
+        </div>
 
         {selected && !showSearch ? (
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-gray-800 overflow-hidden ring-2 ring-gray-700 flex-shrink-0">
+            <div className="relative w-12 h-12 rounded-full bg-gray-800 overflow-hidden ring-2 ring-gray-700 flex-shrink-0 group">
+              <div className="absolute inset-0 rounded-full bg-gradient-to-b from-ufc-red/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
               {selected.image ? (
-                <img src={selected.image} alt="" className="w-full h-full object-cover" />
+                <img src={selected.image} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-gray-600 text-lg font-bold">
                   {selected.name.charAt(0)}
@@ -208,7 +257,7 @@ function FighterSelector({ side, search, setSearch, results, loading, selected, 
               <p className="text-white text-sm font-bold truncate">{selected.name}</p>
               <p className="text-gray-500 text-[10px]">{selected.record || 'N/A'} · {selected.weightClass || 'N/A'}</p>
             </div>
-            <button onClick={() => { setShowSearch(true); setSearch(''); }} className="text-gray-500 hover:text-white text-xs p-1 transition">
+            <button onClick={() => { setShowSearch(true); setSearch(''); }} className="text-gray-500 hover:text-white text-xs p-1 transition hover:bg-white/10 rounded-full w-6 h-6 flex items-center justify-center">
               ✕
             </button>
           </div>
