@@ -34,6 +34,11 @@ async function queryRaw(strings: TemplateStringsArray, ...params: any[]) {
   return (await db(strings, ...params)) as any[];
 }
 
+export async function rawQueryOrThrow(sql: string, params?: any[]) {
+  const db = getDb();
+  return (await (db as any)(sql, params || [])) as any[];
+}
+
 export async function initDb() {
   await queryRaw`
     CREATE TABLE IF NOT EXISTS users (
@@ -80,6 +85,26 @@ export async function initDb() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `;
+  const db = getDb();
+  const migs = [
+    'ALTER TABLE ufc_replays ADD COLUMN IF NOT EXISTS slug TEXT',
+    'ALTER TABLE ufc_replays ADD COLUMN IF NOT EXISTS title TEXT',
+    'ALTER TABLE ufc_replays ADD COLUMN IF NOT EXISTS promotion TEXT DEFAULT \'UFC\'',
+    'ALTER TABLE ufc_replays ADD COLUMN IF NOT EXISTS event_name TEXT',
+    'ALTER TABLE ufc_replays ADD COLUMN IF NOT EXISTS weight_class TEXT',
+    'ALTER TABLE ufc_replays ADD COLUMN IF NOT EXISTS result TEXT',
+    'ALTER TABLE ufc_replays ADD COLUMN IF NOT EXISTS duration TEXT',
+    'ALTER TABLE ufc_replays ADD COLUMN IF NOT EXISTS description TEXT',
+    'ALTER TABLE ufc_replays ADD COLUMN IF NOT EXISTS thumbnail TEXT',
+    'ALTER TABLE ufc_replays ADD COLUMN IF NOT EXISTS event_date TEXT',
+    'ALTER TABLE ufc_replays ADD COLUMN IF NOT EXISTS featured INTEGER DEFAULT 0',
+    'ALTER TABLE ufc_replays ADD COLUMN IF NOT EXISTS published INTEGER DEFAULT 1',
+    'ALTER TABLE ufc_replays ADD COLUMN IF NOT EXISTS views INTEGER DEFAULT 0',
+    'ALTER TABLE ufc_replays ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
+  ];
+  for (const m of migs) {
+    try { await (db as any)(m); } catch (e: any) { if (!e.message?.includes('already exists')) throw e; }
+  }
   const adminExists = await queryRaw`SELECT COUNT(*) as count FROM users WHERE username = 'admin'`;
   if (adminExists[0]?.count === '0' || adminExists[0]?.count === 0) {
     const bcrypt = await import('bcryptjs');

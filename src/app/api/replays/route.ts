@@ -1,85 +1,160 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { query, rawQueryOrThrow } from '@/lib/db';
 import { cookies } from 'next/headers';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
+  const slug = searchParams.get('slug');
+  const search = searchParams.get('search');
+  const promotion = searchParams.get('promotion');
+  const sort = searchParams.get('sort') || 'newest';
+  const featured = searchParams.get('featured');
+  const admin = searchParams.get('admin');
+  const limit = parseInt(searchParams.get('limit') || '50');
+  const offset = parseInt(searchParams.get('offset') || '0');
 
   if (id) {
     const replays = await query`SELECT * FROM ufc_replays WHERE id = ${parseInt(id)}`;
-    if (replays.length === 0) {
-      return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
-    }
+    if (replays.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
     return NextResponse.json({ replay: replays[0] });
   }
 
-  const replays = await query`SELECT * FROM ufc_replays ORDER BY created_at DESC`;
-  return NextResponse.json({ replays });
+  if (slug) {
+    const replays = await query`SELECT * FROM ufc_replays WHERE slug = ${slug}`;
+    if (replays.length === 0) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
+    return NextResponse.json({ replay: replays[0] });
+  }
+
+  try {
+    const conditions: string[] = [];
+    const params: any[] = [];
+    let idx = 1;
+
+    if (!admin) conditions.push('published = 1');
+    if (search) {
+      params.push(`%${search}%`);
+      conditions.push(`(title ILIKE $${idx} OR fighter1 ILIKE $${idx} OR fighter2 ILIKE $${idx} OR event_name ILIKE $${idx} OR promotion ILIKE $${idx})`);
+      idx++;
+    }
+    if (promotion) {
+      params.push(promotion);
+      conditions.push(`promotion = $${idx}`);
+      idx++;
+    }
+    if (featured === '1') {
+      conditions.push('featured = 1');
+    }
+
+    const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+
+    let orderBy = 'ORDER BY created_at DESC';
+    if (sort === 'oldest') orderBy = 'ORDER BY created_at ASC';
+    else if (sort === 'views') orderBy = 'ORDER BY views DESC';
+    else if (sort === 'event_date') orderBy = 'ORDER BY event_date DESC NULLS LAST';
+
+    const replays = await rawQueryOrThrow(
+      `SELECT * FROM ufc_replays ${where} ${orderBy} LIMIT ${limit} OFFSET ${offset}`,
+      params
+    );
+    const countResult = await rawQueryOrThrow(
+      `SELECT COUNT(*) as count FROM ufc_replays ${where}`,
+      params
+    );
+
+    return NextResponse.json({ replays, total: countResult[0]?.count || 0 });
+  } catch (err) {
+    return NextResponse.json({ success: false, error: 'Server error' }, { status: 500 });
+  }
 }
 
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get('session');
-  if (!sessionCookie?.value) {
-    return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
-  }
+  if (!sessionCookie?.value) return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
 
   let user: { id: number; username: string; is_admin: number };
-  try {
-    user = JSON.parse(Buffer.from(sessionCookie.value, 'base64').toString('utf-8'));
-  } catch {
-    return NextResponse.json({ success: false, error: 'Invalid session' }, { status: 401 });
-  }
-
-  if (!user.is_admin) {
-    return NextResponse.json({ success: false, error: 'Admin only' }, { status: 403 });
-  }
+  try { user = JSON.parse(Buffer.from(sessionCookie.value, 'base64').toString('utf-8')); }
+  catch { return NextResponse.json({ success: false, error: 'Invalid session' }, { status: 401 }); }
+  if (!user.is_admin) return NextResponse.json({ success: false, error: 'Admin only' }, { status: 403 });
 
   try {
-    const { fighter1, fighter2, fighter1_img, fighter2_img, event, video_url } = await request.json();
+    const body = await request.json();
+    const { title, slug, promotion, event_name, fighter1, fighter2, weight_class, result, duration, description, thumbnail, video_url, event_date, featured, published } = body;
 
-    if (!fighter1 || !fighter2 || !video_url) {
-      return NextResponse.json({ success: false, error: 'Fighter names and video URL are required' }, { status: 400 });
+    if (!title || !slug || !video_url || !fighter1 || !fighter2) {
+      return NextResponse.json({ success: false, error: 'Title, slug, video URL, and fighter names are required' }, { status: 400 });
     }
 
     await query`
-      INSERT INTO ufc_replays (fighter1, fighter2, fighter1_img, fighter2_img, event, video_url)
-      VALUES (${fighter1}, ${fighter2}, ${fighter1_img || null}, ${fighter2_img || null}, ${event || null}, ${video_url})
+      INSERT INTO ufc_replays (title, slug, promotion, event_name, fighter1, fighter2, weight_class, result, duration, description, thumbnail, video_url, event_date, featured, published)
+      VALUES (${title}, ${slug}, ${promotion || 'UFC'}, ${event_name || null}, ${fighter1}, ${fighter2}, ${weight_class || null}, ${result || null}, ${duration || null}, ${description || null}, ${thumbnail || null}, ${video_url}, ${event_date || null}, ${featured ? 1 : 0}, ${published !== undefined ? (published ? 1 : 0) : 1})
     `;
 
-    return NextResponse.json({ success: true });
-  } catch (err) {
-    return NextResponse.json({ success: false, error: 'Server error' }, { status: 500 });
+    return NextResponse.json({ success: true, message: 'Replay created' });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message || 'Server error' }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get('session');
+  if (!sessionCookie?.value) return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
+
+  let user: { id: number; username: string; is_admin: number };
+  try { user = JSON.parse(Buffer.from(sessionCookie.value, 'base64').toString('utf-8')); }
+  catch { return NextResponse.json({ success: false, error: 'Invalid session' }, { status: 401 }); }
+  if (!user.is_admin) return NextResponse.json({ success: false, error: 'Admin only' }, { status: 403 });
+
+  try {
+    const body = await request.json();
+    const { id, title, slug, promotion, event_name, fighter1, fighter2, weight_class, result, duration, description, thumbnail, video_url, event_date, featured, published } = body;
+    if (!id) return NextResponse.json({ success: false, error: 'Replay ID is required' }, { status: 400 });
+
+    const sets: string[] = [];
+    const params: any[] = [];
+    let idx = 1;
+
+    const add = (name: string, val: any) => {
+      if (val !== undefined) { sets.push(`${name} = $${idx++}`); params.push(val); }
+    };
+    add('title', title); add('slug', slug); add('promotion', promotion);
+    add('event_name', event_name); add('fighter1', fighter1); add('fighter2', fighter2);
+    add('weight_class', weight_class); add('result', result); add('duration', duration);
+    add('description', description); add('thumbnail', thumbnail); add('video_url', video_url);
+    add('event_date', event_date);
+    if (featured !== undefined) add('featured', featured ? 1 : 0);
+    if (published !== undefined) add('published', published ? 1 : 0);
+    add('updated_at', new Date().toISOString());
+
+    if (sets.length === 0) return NextResponse.json({ success: false, error: 'No fields' }, { status: 400 });
+
+    params.push(id);
+    await rawQueryOrThrow(`UPDATE ufc_replays SET ${sets.join(', ')} WHERE id = $${idx}`, params);
+
+    return NextResponse.json({ success: true, message: 'Replay updated' });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message || 'Server error' }, { status: 500 });
   }
 }
 
 export async function DELETE(request: NextRequest) {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get('session');
-  if (!sessionCookie?.value) {
-    return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
-  }
+  if (!sessionCookie?.value) return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
 
   let user: { id: number; username: string; is_admin: number };
-  try {
-    user = JSON.parse(Buffer.from(sessionCookie.value, 'base64').toString('utf-8'));
-  } catch {
-    return NextResponse.json({ success: false, error: 'Invalid session' }, { status: 401 });
-  }
-
-  if (!user.is_admin) {
-    return NextResponse.json({ success: false, error: 'Admin only' }, { status: 403 });
-  }
+  try { user = JSON.parse(Buffer.from(sessionCookie.value, 'base64').toString('utf-8')); }
+  catch { return NextResponse.json({ success: false, error: 'Invalid session' }, { status: 401 }); }
+  if (!user.is_admin) return NextResponse.json({ success: false, error: 'Admin only' }, { status: 403 });
 
   try {
     const { id } = await request.json();
-    if (!id) {
-      return NextResponse.json({ success: false, error: 'Replay ID is required' }, { status: 400 });
-    }
+    if (!id) return NextResponse.json({ success: false, error: 'Replay ID is required' }, { status: 400 });
     await query`DELETE FROM ufc_replays WHERE id = ${id}`;
-    return NextResponse.json({ success: true });
-  } catch (err) {
-    return NextResponse.json({ success: false, error: 'Server error' }, { status: 500 });
+    return NextResponse.json({ success: true, message: 'Replay deleted' });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message || 'Server error' }, { status: 500 });
   }
 }

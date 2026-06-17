@@ -36,12 +36,24 @@ interface Stream {
 
 interface Replay {
   id: number;
+  title: string | null;
+  slug: string | null;
+  promotion: string;
+  event_name: string | null;
   fighter1: string;
   fighter2: string;
   fighter1_img: string | null;
   fighter2_img: string | null;
-  event: string | null;
+  weight_class: string | null;
+  result: string | null;
+  duration: string | null;
+  description: string | null;
+  thumbnail: string | null;
   video_url: string;
+  event_date: string | null;
+  featured: number;
+  published: number;
+  views: number;
   created_at: string;
 }
 
@@ -326,81 +338,124 @@ function StreamsTab({ streams, onRefresh }: { streams: Stream[]; onRefresh: () =
 }
 
 function ReplaysTab({ replays, onRefresh }: { replays: Replay[]; onRefresh: () => void }) {
-  const [fighter1, setFighter1] = useState('');
-  const [fighter2, setFighter2] = useState('');
-  const [fighter1Img, setFighter1Img] = useState('');
-  const [fighter2Img, setFighter2Img] = useState('');
-  const [event, setEvent] = useState('');
-  const [videoUrl, setVideoUrl] = useState('');
-  const [error, setError] = useState('');
   const [showAdd, setShowAdd] = useState(false);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [search, setSearch] = useState('');
+  const [error, setError] = useState('');
 
-  const handleAdd = async (e: FormEvent) => {
+  const blank = { title: '', slug: '', promotion: 'UFC', event_name: '', fighter1: '', fighter2: '', fighter1_img: '', fighter2_img: '', weight_class: '', result: '', duration: '', description: '', thumbnail: '', video_url: '', event_date: '', featured: false, published: true };
+  const [form, setForm] = useState(blank);
+
+  const filtered = search ? replays.filter(r =>
+    (r.title || '').toLowerCase().includes(search.toLowerCase()) ||
+    r.fighter1.toLowerCase().includes(search.toLowerCase()) ||
+    r.fighter2.toLowerCase().includes(search.toLowerCase()) ||
+    (r.event_name || '').toLowerCase().includes(search.toLowerCase()) ||
+    r.promotion.toLowerCase().includes(search.toLowerCase())
+  ) : replays;
+
+  const resetForm = () => { setForm(blank); setError(''); setEditId(null); };
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
+    const slug = form.slug || form.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Date.now();
+    const body = { ...form, slug };
+    const method = editId ? 'PATCH' : 'POST';
+
     const res = await fetch('/api/replays', {
-      method: 'POST',
+      method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fighter1, fighter2, fighter1_img: fighter1Img, fighter2_img: fighter2Img, event, video_url: videoUrl }),
+      body: JSON.stringify(editId ? { ...body, id: editId } : body),
     });
     const data = await res.json();
-    if (data.success) {
-      setFighter1(''); setFighter2(''); setFighter1Img(''); setFighter2Img(''); setEvent(''); setVideoUrl('');
-      setShowAdd(false);
-      onRefresh();
-    } else {
-      setError(data.error || 'Failed to add replay');
-    }
+    if (data.success) { resetForm(); setShowAdd(false); onRefresh(); }
+    else setError(data.error || 'Failed');
   };
 
-  const deleteReplay = async (id: number) => {
-    await fetch('/api/replays', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id }),
-    });
+  const toggleFeatured = async (id: number, current: number) => {
+    await fetch('/api/replays', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, featured: current ? 0 : 1 }) });
     onRefresh();
   };
 
+  const togglePublished = async (id: number, current: number) => {
+    await fetch('/api/replays', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, published: current ? 0 : 1 }) });
+    onRefresh();
+  };
+
+  const deleteReplay = async (id: number) => {
+    await fetch('/api/replays', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+    onRefresh();
+  };
+
+  const startEdit = (r: Replay) => {
+    setForm({
+      title: r.title || '', slug: r.slug || '', promotion: r.promotion || 'UFC', event_name: r.event_name || '',
+      fighter1: r.fighter1, fighter2: r.fighter2, fighter1_img: r.fighter1_img || '', fighter2_img: r.fighter2_img || '',
+      weight_class: r.weight_class || '', result: r.result || '', duration: r.duration || '', description: r.description || '',
+      thumbnail: r.thumbnail || '', video_url: r.video_url, event_date: r.event_date || '', featured: !!r.featured, published: !!r.published,
+    });
+    setEditId(r.id);
+    setShowAdd(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const promotions = ['UFC', 'PFL', 'ONE Championship', 'Bellator', 'Boxing', 'Kickboxing'];
+
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h2 className="text-white text-sm uppercase tracking-wider font-semibold">Manage Replays ({replays.length})</h2>
-        <button onClick={() => setShowAdd(!showAdd)} className="bg-ufc-red text-white px-5 py-2 text-xs uppercase font-semibold rounded-full hover:bg-red-700 transition shadow-lg shadow-red-900/30">
+      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+        <div className="relative flex-1 max-w-xs">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search replays..." className="w-full bg-white/5 border border-gray-800 rounded-xl pl-8 pr-3 py-2 text-white text-xs placeholder-gray-600 focus:outline-none focus:border-ufc-red/50" />
+        </div>
+        <button onClick={() => { resetForm(); setShowAdd(!showAdd); }} className="bg-ufc-red text-white px-5 py-2 text-xs uppercase font-semibold rounded-full hover:bg-red-700 transition shadow-lg shadow-red-900/30">
           {showAdd ? 'Cancel' : '+ Add Replay'}
         </button>
       </div>
 
       {showAdd && (
-        <form onSubmit={handleAdd} className="bg-gradient-to-b from-[#1a1a1a] to-[#111] border border-gray-800 rounded-2xl p-6 space-y-4 card-hover">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <form onSubmit={handleSubmit} className="bg-gradient-to-b from-[#1a1a1a] to-[#111] border border-gray-800 rounded-2xl p-6 space-y-4 card-hover">
+          <h3 className="text-white text-xs uppercase font-bold tracking-wider mb-2">{editId ? 'Edit Replay' : 'Add New Replay'}</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <Input label="Title" value={form.title} onChange={(v) => setForm({...form, title: v})} required />
+            <Input label="Slug (auto)" value={form.slug} onChange={(v) => setForm({...form, slug: v})} placeholder="leave blank to auto-generate" />
             <div>
-              <label className="block text-gray-400 text-[10px] uppercase tracking-wider mb-1.5">Fighter 1</label>
-              <input value={fighter1} onChange={(e) => setFighter1(e.target.value)} placeholder="e.g. Israel Adesanya" required className="w-full bg-white/5 border border-gray-700/50 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-ufc-red/50 transition-all" />
+              <label className="block text-gray-400 text-[10px] uppercase tracking-wider mb-1">Promotion</label>
+              <select value={form.promotion} onChange={(e) => setForm({...form, promotion: e.target.value})} className="w-full bg-white/5 border border-gray-700/50 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-ufc-red/50">
+                {promotions.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
             </div>
-            <div>
-              <label className="block text-gray-400 text-[10px] uppercase tracking-wider mb-1.5">Fighter 2</label>
-              <input value={fighter2} onChange={(e) => setFighter2(e.target.value)} placeholder="e.g. Jared Cannonier" required className="w-full bg-white/5 border border-gray-700/50 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-ufc-red/50 transition-all" />
-            </div>
-            <div>
-              <label className="block text-gray-400 text-[10px] uppercase tracking-wider mb-1.5">Fighter 1 Image URL</label>
-              <input value={fighter1Img} onChange={(e) => setFighter1Img(e.target.value)} placeholder="ESPN headshot URL" className="w-full bg-white/5 border border-gray-700/50 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-ufc-red/50 transition-all" />
-            </div>
-            <div>
-              <label className="block text-gray-400 text-[10px] uppercase tracking-wider mb-1.5">Fighter 2 Image URL</label>
-              <input value={fighter2Img} onChange={(e) => setFighter2Img(e.target.value)} placeholder="ESPN headshot URL" className="w-full bg-white/5 border border-gray-700/50 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-ufc-red/50 transition-all" />
-            </div>
-            <div>
-              <label className="block text-gray-400 text-[10px] uppercase tracking-wider mb-1.5">Event Name</label>
-              <input value={event} onChange={(e) => setEvent(e.target.value)} placeholder="e.g. UFC 300" className="w-full bg-white/5 border border-gray-700/50 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-ufc-red/50 transition-all" />
-            </div>
-            <div>
-              <label className="block text-gray-400 text-[10px] uppercase tracking-wider mb-1.5">Video URL</label>
-              <input value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="MP4/YouTube URL" required className="w-full bg-white/5 border border-gray-700/50 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-ufc-red/50 transition-all" />
+            <Input label="Event Name" value={form.event_name} onChange={(v) => setForm({...form, event_name: v})} />
+            <Input label="Fighter 1" value={form.fighter1} onChange={(v) => setForm({...form, fighter1: v})} required />
+            <Input label="Fighter 2" value={form.fighter2} onChange={(v) => setForm({...form, fighter2: v})} required />
+            <Input label="Fighter 1 Image URL" value={form.fighter1_img} onChange={(v) => setForm({...form, fighter1_img: v})} />
+            <Input label="Fighter 2 Image URL" value={form.fighter2_img} onChange={(v) => setForm({...form, fighter2_img: v})} />
+            <Input label="Thumbnail URL" value={form.thumbnail} onChange={(v) => setForm({...form, thumbnail: v})} placeholder="Landscape 16:9 image" />
+            <Input label="Video URL" value={form.video_url} onChange={(v) => setForm({...form, video_url: v})} required placeholder="MP4 / HLS / YouTube" />
+            <Input label="Weight Class" value={form.weight_class} onChange={(v) => setForm({...form, weight_class: v})} />
+            <Input label="Result" value={form.result} onChange={(v) => setForm({...form, result: v})} placeholder="e.g. KO Round 2" />
+            <Input label="Duration" value={form.duration} onChange={(v) => setForm({...form, duration: v})} placeholder="e.g. 14:32" />
+            <Input label="Event Date" value={form.event_date} onChange={(v) => setForm({...form, event_date: v})} type="date" />
+            <div className="md:col-span-2 lg:col-span-3">
+              <label className="block text-gray-400 text-[10px] uppercase tracking-wider mb-1">Description</label>
+              <textarea value={form.description} onChange={(e) => setForm({...form, description: e.target.value})} rows={3} className="w-full bg-white/5 border border-gray-700/50 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-ufc-red/50 resize-none" />
             </div>
           </div>
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2 text-gray-300 text-xs bg-white/[0.03] rounded-xl px-4 py-3">
+              <input type="checkbox" checked={form.featured} onChange={(e) => setForm({...form, featured: e.target.checked})} className="accent-ufc-red w-4 h-4" />
+              <span>Featured</span>
+            </label>
+            <label className="flex items-center gap-2 text-gray-300 text-xs bg-white/[0.03] rounded-xl px-4 py-3">
+              <input type="checkbox" checked={form.published} onChange={(e) => setForm({...form, published: e.target.checked})} className="accent-ufc-red w-4 h-4" />
+              <span>Published</span>
+            </label>
+          </div>
           {error && <p className="text-red-400 text-xs bg-red-400/10 rounded-lg px-3 py-2">{error}</p>}
-          <button type="submit" className="bg-ufc-red text-white px-6 py-2.5 text-sm uppercase font-semibold rounded-xl hover:bg-red-700 transition shadow-lg shadow-red-900/30">Add Replay</button>
+          <button type="submit" className="bg-ufc-red text-white px-6 py-2.5 text-sm uppercase font-semibold rounded-xl hover:bg-red-700 transition shadow-lg shadow-red-900/30">
+            {editId ? 'Update Replay' : 'Add Replay'}
+          </button>
         </form>
       )}
 
@@ -409,36 +464,56 @@ function ReplaysTab({ replays, onRefresh }: { replays: Replay[]; onRefresh: () =
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-white/[0.03] border-b border-gray-800/50">
-                <th className="text-left px-5 py-3.5 text-gray-400 text-[10px] uppercase tracking-wider font-semibold">Fight</th>
-                <th className="text-left px-5 py-3.5 text-gray-400 text-[10px] uppercase tracking-wider font-semibold">Event</th>
-                <th className="text-left px-5 py-3.5 text-gray-400 text-[10px] uppercase tracking-wider font-semibold">Date Added</th>
+                <th className="text-left px-5 py-3.5 text-gray-400 text-[10px] uppercase tracking-wider font-semibold">Title / Fight</th>
+                <th className="text-left px-5 py-3.5 text-gray-400 text-[10px] uppercase tracking-wider font-semibold">Promotion</th>
+                <th className="text-left px-5 py-3.5 text-gray-400 text-[10px] uppercase tracking-wider font-semibold">Status</th>
+                <th className="text-left px-5 py-3.5 text-gray-400 text-[10px] uppercase tracking-wider font-semibold">Views</th>
                 <th className="text-right px-5 py-3.5 text-gray-400 text-[10px] uppercase tracking-wider font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800/50">
-              {replays.map((r) => (
+              {filtered.map((r) => (
                 <tr key={r.id} className="hover:bg-white/[0.02] transition-colors">
                   <td className="px-5 py-4">
-                    <div className="flex items-center gap-2">
-                      <span className="text-white text-xs font-medium">{r.fighter1}</span>
-                      <span className="text-ufc-red text-[10px] font-bold">VS</span>
-                      <span className="text-white text-xs font-medium">{r.fighter2}</span>
+                    <p className="text-white text-xs font-medium truncate max-w-[200px]">{r.title || `${r.fighter1} vs ${r.fighter2}`}</p>
+                    <p className="text-gray-600 text-[9px] truncate max-w-[200px]">{r.slug}</p>
+                  </td>
+                  <td className="px-5 py-4">
+                    <span className="text-gray-400 text-[10px]">{r.promotion || 'UFC'}</span>
+                  </td>
+                  <td className="px-5 py-4">
+                    <div className="flex gap-1.5">
+                      {r.featured ? <span className="text-[9px] bg-ufc-red/10 text-ufc-red px-1.5 py-0.5 rounded font-semibold">F</span> : null}
+                      {r.published ? (
+                        <span className="text-[9px] bg-green-500/10 text-green-400 px-1.5 py-0.5 rounded font-semibold">PUB</span>
+                      ) : (
+                        <span className="text-[9px] bg-gray-500/10 text-gray-500 px-1.5 py-0.5 rounded">DRAFT</span>
+                      )}
                     </div>
                   </td>
-                  <td className="px-5 py-4 text-gray-400 text-xs">{r.event || '-'}</td>
-                  <td className="px-5 py-4 text-gray-500 text-xs">{new Date(r.created_at).toLocaleDateString()}</td>
-                  <td className="px-5 py-4 text-right">
-                    <button onClick={() => deleteReplay(r.id)} className="text-red-400 text-xs px-3 py-1 rounded-full bg-red-400/10 hover:bg-red-400/20 transition">Delete</button>
+                  <td className="px-5 py-4 text-gray-500 text-xs">{r.views || 0}</td>
+                  <td className="px-5 py-4 text-right whitespace-nowrap">
+                    <button onClick={() => toggleFeatured(r.id, r.featured)} className={`text-[10px] mr-1.5 px-2 py-1 rounded-full transition ${r.featured ? 'text-yellow-400 bg-yellow-400/10 hover:bg-yellow-400/20' : 'text-gray-500 bg-white/5 hover:text-yellow-400'}`} title="Toggle featured">★</button>
+                    <button onClick={() => togglePublished(r.id, r.published)} className={`text-[10px] mr-1.5 px-2 py-1 rounded-full transition ${r.published ? 'text-green-400 bg-green-400/10 hover:bg-green-400/20' : 'text-gray-500 bg-white/5 hover:text-green-400'}`} title="Toggle published">{r.published ? 'ON' : 'OFF'}</button>
+                    <button onClick={() => startEdit(r)} className="text-blue-400 text-[10px] mr-1.5 px-2 py-1 rounded-full bg-blue-400/10 hover:bg-blue-400/20 transition">Edit</button>
+                    <button onClick={() => deleteReplay(r.id)} className="text-red-400 text-[10px] px-2 py-1 rounded-full bg-red-400/10 hover:bg-red-400/20 transition">Delete</button>
                   </td>
                 </tr>
               ))}
-              {replays.length === 0 && (
-                <tr><td colSpan={4} className="px-5 py-12 text-center text-gray-500 text-sm">No replays yet</td></tr>
-              )}
+              {filtered.length === 0 && <tr><td colSpan={5} className="px-5 py-12 text-center text-gray-500 text-sm">{search ? 'No matching replays' : 'No replays yet'}</td></tr>}
             </tbody>
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+function Input({ label, value, onChange, placeholder, type, required }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string; required?: boolean }) {
+  return (
+    <div>
+      <label className="block text-gray-400 text-[10px] uppercase tracking-wider mb-1">{label}</label>
+      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} type={type || 'text'} required={required} className="w-full bg-white/5 border border-gray-700/50 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-ufc-red/50 transition-all" />
     </div>
   );
 }
