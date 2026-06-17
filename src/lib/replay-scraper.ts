@@ -49,7 +49,8 @@ async function fetchEvents(limit = 10): Promise<MEvent[]> {
   const latestEvents: any[] = data?.props?.pageProps?.latestEvents || [];
   const available = latestEvents.filter((e: any) => e.is_video_available);
   console.log('[SCRAPER] Homepage:', latestEvents.length, 'events total,', available.length, 'with video, limit', limit);
-  return available.slice(0, limit).map((e: any) => ({
+  // Reverse: process oldest first since newer events often lack uploaded clips
+  return available.reverse().slice(0, limit).map((e: any) => ({
     id: e.id, name: e.name, date: e.date, location: e.location || '',
     cover_url: e.cover_url ? `https://api.mmareplayfull.com${e.cover_url}` : '',
   }));
