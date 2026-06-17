@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { after } from 'next/server';
 import { query, rawQueryOrThrow } from '@/lib/db';
 import { cookies } from 'next/headers';
 import { scrapeAll } from '@/lib/replay-scraper';
@@ -32,12 +33,18 @@ export async function GET(request: NextRequest) {
     const countRows = await query`SELECT COUNT(*) as count FROM ufc_replays`;
     const currentCount = countRows.length > 0 ? parseInt(countRows[0]?.count || '0') : 0;
     if (forceScrape || currentCount < 200) {
-      const limit = forceScrape ? 10 : (currentCount < 30 ? 10 : 5);
-      const result = await scrapeAll(limit);
-      if (result.errors.length > 0) {
-        console.error('Auto-scrape errors:', JSON.stringify(result.errors.slice(0, 5)));
-      }
-      console.log('Scrape result:', result.newFights, 'new fights from', result.events, 'events');
+      const scrapeLimit = forceScrape ? 10 : (currentCount < 30 ? 10 : 5);
+      after(async () => {
+        try {
+          const result = await scrapeAll(scrapeLimit);
+          if (result.errors.length > 0) {
+            console.error('Background scrape errors:', JSON.stringify(result.errors.slice(0, 5)));
+          }
+          console.log('Background scrape result:', result.newFights, 'new fights from', result.events, 'events');
+        } catch (e: any) {
+          console.error('Background scrape crashed:', e.message);
+        }
+      });
     }
 
     const conditions: string[] = [];
