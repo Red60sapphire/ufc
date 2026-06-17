@@ -120,19 +120,23 @@ function getCompRecord(competitor: any): string {
 }
 
 function mapCompetition(c: any) {
-  const f1 = c?.competitors?.[0]?.athlete;
-  const f2 = c?.competitors?.[1]?.athlete;
+  const comp1 = c?.competitors?.[0];
+  const comp2 = c?.competitors?.[1];
+  const f1 = comp1?.athlete;
+  const f2 = comp2?.athlete;
+  const athleteId1 = f1?.id || comp1?.id;
+  const athleteId2 = f2?.id || comp2?.id;
   return {
     id: c.id,
     order: c.order || 0,
     fighter1: f1?.displayName || 'TBD',
     fighter2: f2?.displayName || 'TBD',
-    fighter1Record: getCompRecord(c?.competitors?.[0]),
-    fighter2Record: getCompRecord(c?.competitors?.[1]),
-    fighter1Img: f1?.id ? buildHeadshotUrl(f1.id) : undefined,
-    fighter2Img: f2?.id ? buildHeadshotUrl(f2.id) : undefined,
-    fighter1Id: f1?.id,
-    fighter2Id: f2?.id,
+    fighter1Record: getCompRecord(comp1),
+    fighter2Record: getCompRecord(comp2),
+    fighter1Img: athleteId1 ? buildHeadshotUrl(athleteId1) : undefined,
+    fighter2Img: athleteId2 ? buildHeadshotUrl(athleteId2) : undefined,
+    fighter1Id: athleteId1,
+    fighter2Id: athleteId2,
     weightClass: c.type?.abbreviation || c.description || '',
     broadcast: c.broadcast || c.broadcasts?.[0]?.names?.[0],
     status: c.status?.type?.description,
@@ -148,7 +152,12 @@ export async function getUpcomingEvents(limit = 6): Promise<ESPNEvent[]> {
       const comps = e.competitions || [];
       const mainFight = comps[comps.length - 1];
       const f1 = mainFight?.competitors?.[0]?.athlete;
-      const f2 = mainFight?.competitors?.[1]?.athlete;
+      const mainComp1 = mainFight?.competitors?.[0];
+      const mainComp2 = mainFight?.competitors?.[1];
+      const mf1 = mainComp1?.athlete;
+      const mf2 = mainComp2?.athlete;
+      const mainAthleteId1 = mf1?.id || mainComp1?.id;
+      const mainAthleteId2 = mf2?.id || mainComp2?.id;
       return {
         id: e.id,
         name: e.name,
@@ -158,12 +167,12 @@ export async function getUpcomingEvents(limit = 6): Promise<ESPNEvent[]> {
         status: mainFight?.status?.type?.description,
         statusState: mainFight?.status?.type?.state,
         broadcast: mainFight?.broadcast || mainFight?.broadcasts?.[0]?.names?.[0],
-        fighter1: f1?.displayName,
-        fighter2: f2?.displayName,
-        fighter1Record: getCompRecord(mainFight?.competitors?.[0]),
-        fighter2Record: getCompRecord(mainFight?.competitors?.[1]),
-        fighter1Img: f1?.id ? buildHeadshotUrl(f1.id) : undefined,
-        fighter2Img: f2?.id ? buildHeadshotUrl(f2.id) : undefined,
+        fighter1: mf1?.displayName,
+        fighter2: mf2?.displayName,
+        fighter1Record: getCompRecord(mainComp1),
+        fighter2Record: getCompRecord(mainComp2),
+        fighter1Img: mainAthleteId1 ? buildHeadshotUrl(mainAthleteId1) : undefined,
+        fighter2Img: mainAthleteId2 ? buildHeadshotUrl(mainAthleteId2) : undefined,
         weightClass: mainFight?.type?.abbreviation || mainFight?.description,
         fights: comps.map(mapCompetition),
       };

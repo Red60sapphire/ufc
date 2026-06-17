@@ -39,7 +39,7 @@ export default function Navbar({ user }: NavbarProps) {
               </Link>
             ))}
             <a href="#" className="px-4 py-2 text-gray-300 hover:text-white text-sm uppercase tracking-wider transition">Video</a>
-            <a href="#" className="px-4 py-2 text-gray-300 hover:text-white text-sm uppercase tracking-wider transition">Discord</a>
+            <a href="https://discord.gg/Dh2gUUgYTg" target="_blank" rel="noopener noreferrer" className="px-4 py-2 text-gray-300 hover:text-white text-sm uppercase tracking-wider transition">Discord</a>
             {user?.is_admin ? (
               <Link href="/admin" className="px-4 py-2 text-ufc-red hover:text-red-300 text-sm uppercase tracking-wider font-semibold transition">Admin</Link>
             ) : null}

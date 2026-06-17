@@ -29,9 +29,7 @@ export default function Footer() {
           <div>
             <h4 className="text-white text-xs uppercase tracking-wider font-semibold mb-3">Community</h4>
             <div className="space-y-2">
-              <a href="#" className="block text-gray-500 text-xs hover:text-gray-300 transition">Discord</a>
-              <a href="#" className="block text-gray-500 text-xs hover:text-gray-300 transition">Telegram</a>
-              <a href="#" className="block text-gray-500 text-xs hover:text-gray-300 transition">Reddit</a>
+              <a href="https://discord.gg/Dh2gUUgYTg" target="_blank" rel="noopener noreferrer" className="block text-gray-500 text-xs hover:text-gray-300 transition">Discord</a>
             </div>
           </div>
         </div>
