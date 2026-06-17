@@ -14,7 +14,8 @@ export default function VideoPlayer({ src, poster, className = '' }: VideoPlayer
   const [loaded, setLoaded] = useState(false);
 
   const needsProxy = src && !src.includes('/api/video-proxy') && (src.includes('mmareplayfull.com') || src.includes('portal.portalmma.cc'));
-  const videoSrc = needsProxy ? `/api/video-proxy?url=${encodeURIComponent(src)}` : src;
+  const proxiedUrl = needsProxy ? src.replace('mmareplayfull.com', 'api.mmareplayfull.com') : src;
+  const videoSrc = needsProxy ? `/api/video-proxy?url=${encodeURIComponent(proxiedUrl)}` : src;
 
   const isHls = !!(videoSrc && (videoSrc.includes('.m3u8') || videoSrc.includes('/play/clip/') || videoSrc.includes('/play/file/') || videoSrc.includes('/play/seg') || videoSrc.includes('/api/video-proxy')));
 

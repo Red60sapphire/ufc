@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const ALLOWED_HOSTS = ['api.mmareplayfull.com', 'portal.portalmma.cc'];
+const ALLOWED_HOSTS = ['api.mmareplayfull.com', 'portal.portalmma.cc', 'mmareplayfull.com'];
 
 export async function OPTIONS() {
   return new NextResponse(null, {
