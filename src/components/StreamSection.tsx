@@ -42,7 +42,7 @@ export default function StreamSection({ streams }: { streams: Stream[] }) {
         <div className="h-4 w-1 bg-ufc-red rounded-full" />
         <h2 className="text-white text-sm uppercase tracking-wider font-bold">Live Streams</h2>
         {activeStream?.is_live ? (
-          <span className="live-badge bg-ufc-red text-white text-[10px] px-2 py-0.5 rounded-full uppercase font-bold text-[10px]">LIVE</span>
+          <span className="live-badge bg-ufc-red text-white text-[10px] px-2 py-0.5 rounded-full uppercase font-bold">LIVE</span>
         ) : null}
       </div>
 
