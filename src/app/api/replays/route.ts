@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
 
     if (forceScrape) {
       console.log('[API] Force scrape requested (current:', currentCount, ')...');
-      const scrapeResult = await scrapeAll(20);
+      const scrapeResult = await scrapeAll(30);
       console.log('[API] Force scrape done:', scrapeResult.newFights, 'new,', scrapeResult.errors.length, 'errors');
     }
 
