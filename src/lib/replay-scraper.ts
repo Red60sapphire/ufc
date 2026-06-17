@@ -132,10 +132,17 @@ export async function scrapeAll(eventLimit = 10): Promise<{
     const events = await fetchEvents(eventLimit);
     totalEvents = events.length;
 
+    const existingEvents = new Set(
+      (await query`SELECT DISTINCT event_name, event_date FROM ufc_replays`)
+        .map((r: any) => `${r.event_name}|${r.event_date}`)
+    );
+
     const eventResults = await Promise.all(events.map(async (event) => {
       const eventErrors: string[] = [];
       let eventFights = 0;
       let eventNewFights = 0;
+
+      if (existingEvents.has(`${event.name}|${event.date}`)) return { eventFights: 0, eventNewFights: 0, eventErrors: [] };
 
       try {
         const fights = await fetchFights(event);
