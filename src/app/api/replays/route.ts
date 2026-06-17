@@ -28,9 +28,15 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const forceScrape = searchParams.get('force') === '1';
     const countRows = await rawQueryOrThrow('SELECT COUNT(*) as count FROM ufc_replays', []);
-    if (parseInt(countRows[0]?.count || '0') === 0) {
-      scrapeAll().catch(() => {});
+    if (forceScrape || parseInt(countRows[0]?.count || '0') === 0) {
+      const result = await scrapeAll();
+      if (result.errors.length > 0) {
+        console.error('Auto-scrape errors:', JSON.stringify(result.errors));
+      } else {
+        console.log('Auto-scrape result:', result.newFights, 'new fights from', result.events, 'events');
+      }
     }
 
     const conditions: string[] = [];
