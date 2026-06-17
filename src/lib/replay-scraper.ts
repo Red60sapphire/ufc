@@ -132,68 +132,77 @@ export async function scrapeAll(eventLimit = 10): Promise<{
     const events = await fetchEvents(eventLimit);
     totalEvents = events.length;
 
-    for (const event of events) {
+    const eventResults = await Promise.all(events.map(async (event) => {
+      const eventErrors: string[] = [];
+      let eventFights = 0;
+      let eventNewFights = 0;
+
       try {
         const fights = await fetchFights(event);
-        totalFights += fights.length;
+        eventFights = fights.length;
 
-        for (const fight of fights) {
-          try {
-            if (!fight.clip || !fight.is_clip_available) continue;
-            if (fight.participants.length < 2) continue;
+        const validFights = fights.filter(f => f.clip && f.is_clip_available && f.participants.length >= 2);
 
-            const p1 = fight.participants[0];
-            const p2 = fight.participants[1];
-            const title = `${p1.display_name} vs ${p2.display_name}`;
-            const slug = buildFightSlug(event, fight);
+        const fightResults = await Promise.all(validFights.map(async (fight) => {
+          const p1 = fight.participants[0];
+          const p2 = fight.participants[1];
+          const title = `${p1.display_name} vs ${p2.display_name}`;
+          const slug = buildFightSlug(event, fight);
 
-            const existing = await query`SELECT id FROM ufc_replays WHERE slug = ${slug}`;
-            if (existing.length > 0) continue;
+          const existing = await query`SELECT id FROM ufc_replays WHERE slug = ${slug}`;
+          if (existing.length > 0) return 0;
 
-            const promotion = event.name.includes('UFC') ? 'UFC' :
-              event.name.includes('PFL') ? 'PFL' :
-              event.name.includes('ONE') ? 'ONE Championship' :
-              event.name.includes('Bellator') ? 'Bellator' : 'UFC';
+          const promotion = event.name.includes('UFC') ? 'UFC' :
+            event.name.includes('PFL') ? 'PFL' :
+            event.name.includes('ONE') ? 'ONE Championship' :
+            event.name.includes('Bellator') ? 'Bellator' : 'UFC';
 
-            const clipUrl = `${API_BASE}${fight.clip.playlist_url}`;
-            const videoUrl = `/api/video-proxy?url=${encodeURIComponent(clipUrl)}`;
+          const clip = fight.clip!;
+          const clipUrl = `${API_BASE}${clip.playlist_url}`;
+          const videoUrl = `/api/video-proxy?url=${encodeURIComponent(clipUrl)}`;
 
-            const verify = await fetch(clipUrl, {
-              headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Referer': 'https://mmareplayfull.com/',
-              },
-            });
-            if (!verify.ok) {
-              errors.push(`Skipping ${title}: clip returned ${verify.status}`);
-              continue;
-            }
-
-            await rawQueryOrThrow(
-              `INSERT INTO ufc_replays (title, slug, promotion, event_name, fighter1, fighter2, fighter1_img, fighter2_img, weight_class, result, duration, description, thumbnail, video_url, event_date, featured, published, views, created_at, updated_at)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 0, 1, 0, NOW(), NOW())`,
-              [
-                title, slug, promotion, event.name,
-                p1.display_name, p2.display_name,
-                getFighterImg(p1), getFighterImg(p2),
-                fight.weight_class || null,
-                buildResult(fight) || null,
-                fight.fight_time || null,
-                buildDescription(event, fight) || null,
-                event.cover_url || null,
-                videoUrl,
-                event.date || null,
-              ]
-            );
-
-            newFights++;
-          } catch (err: any) {
-            errors.push(`Fight ${fight.id}: ${err.message}`);
+          const verify = await fetch(clipUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              'Referer': 'https://mmareplayfull.com/',
+            },
+          });
+          if (!verify.ok) {
+            eventErrors.push(`Skipping ${title}: clip returned ${verify.status}`);
+            return 0;
           }
-        }
+
+          await rawQueryOrThrow(
+            `INSERT INTO ufc_replays (title, slug, promotion, event_name, fighter1, fighter2, fighter1_img, fighter2_img, weight_class, result, duration, description, thumbnail, video_url, event_date, featured, published, views, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 0, 1, 0, NOW(), NOW())`,
+            [
+              title, slug, promotion, event.name,
+              p1.display_name, p2.display_name,
+              getFighterImg(p1), getFighterImg(p2),
+              fight.weight_class || null,
+              buildResult(fight) || null,
+              fight.fight_time || null,
+              buildDescription(event, fight) || null,
+              event.cover_url || null,
+              videoUrl,
+              event.date || null,
+            ]
+          );
+          return 1;
+        }));
+
+        eventNewFights = fightResults.reduce((a: number, b: number) => a + b, 0);
       } catch (err: any) {
-        errors.push(`Event ${event.id} (${event.name}): ${err.message}`);
+        eventErrors.push(`${event.name}: ${err.message}`);
       }
+
+      return { eventFights, eventNewFights, eventErrors };
+    }));
+
+    for (const r of eventResults) {
+      totalFights += r.eventFights;
+      newFights += r.eventNewFights;
+      errors.push(...r.eventErrors);
     }
   } catch (err: any) {
     errors.push(`Scrape failed: ${err.message}`);
