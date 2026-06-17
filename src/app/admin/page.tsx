@@ -36,10 +36,9 @@ export default function AdminPage() {
           return;
         }
         setUser(d.user);
+        return fetchStreams();
       })
       .catch(() => router.push('/'));
-
-    fetchStreams();
   }, []);
 
   const fetchStreams = async () => {
