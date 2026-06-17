@@ -1,0 +1,31 @@
+import type { Metadata } from "next";
+import "./globals.css";
+import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
+import { cookies } from "next/headers";
+
+export const metadata: Metadata = {
+  title: "UFC.SOLUTIONS - Free UFC Streams & Fight Coverage",
+  description: "Watch free UFC live streams, check upcoming events, fighter profiles, rankings, and news.",
+};
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get("session");
+  let user: { id: number; username: string; is_admin: number } | null = null;
+  if (sessionCookie?.value) {
+    try {
+      user = JSON.parse(Buffer.from(sessionCookie.value, "base64").toString("utf-8"));
+    } catch {}
+  }
+
+  return (
+    <html lang="en" className="h-full">
+      <body className="min-h-full flex flex-col bg-[#0a0a0a] text-white antialiased">
+        <Navbar user={user} />
+        <main className="flex-1">{children}</main>
+        <Footer />
+      </body>
+    </html>
+  );
+}
