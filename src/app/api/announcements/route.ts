@@ -23,55 +23,67 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const cookieStore = await cookies();
-  const user = getSessionUser(cookieStore);
-  if (!user?.is_admin) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+  try {
+    const cookieStore = await cookies();
+    const user = getSessionUser(cookieStore);
+    if (!user?.is_admin) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    }
+
+    const { title, message, duration_minutes, dismissible, persistent } = await req.json();
+    if (!message?.trim()) {
+      return NextResponse.json({ error: 'Message is required' }, { status: 400 });
+    }
+
+    const expiresAt = duration_minutes
+      ? new Date(Date.now() + duration_minutes * 60000).toISOString()
+      : null;
+
+    const result = await rawQueryOrThrow(
+      `INSERT INTO announcements (title, message, created_by, expires_at, dismissible, persistent, duration_minutes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [title || '', message, user.id, expiresAt, dismissible ? 1 : 0, persistent ? 1 : 0, duration_minutes || null]
+    );
+
+    return NextResponse.json({ success: true, announcement: result[0] });
+  } catch (e: unknown) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to create announcement' }, { status: 500 });
   }
-
-  const { title, message, duration_minutes, dismissible, persistent } = await req.json();
-  if (!message?.trim()) {
-    return NextResponse.json({ error: 'Message is required' }, { status: 400 });
-  }
-
-  const expiresAt = duration_minutes
-    ? new Date(Date.now() + duration_minutes * 60000).toISOString()
-    : null;
-
-  const result = await rawQueryOrThrow(
-    `INSERT INTO announcements (title, message, created_by, expires_at, dismissible, persistent, duration_minutes)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-    [title || '', message, user.id, expiresAt, dismissible ? 1 : 0, persistent ? 1 : 0, duration_minutes || null]
-  );
-
-  return NextResponse.json({ success: true, announcement: result[0] });
 }
 
 export async function PATCH(req: NextRequest) {
-  const cookieStore = await cookies();
-  const user = getSessionUser(cookieStore);
-  if (!user?.is_admin) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+  try {
+    const cookieStore = await cookies();
+    const user = getSessionUser(cookieStore);
+    if (!user?.is_admin) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    }
+
+    const { id, is_active } = await req.json();
+    await rawQueryOrThrow(
+      `UPDATE announcements SET is_active = $1 WHERE id = $2`,
+      [is_active ? 1 : 0, id]
+    );
+
+    return NextResponse.json({ success: true });
+  } catch (e: unknown) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to update announcement' }, { status: 500 });
   }
-
-  const { id, is_active } = await req.json();
-  await rawQueryOrThrow(
-    `UPDATE announcements SET is_active = $1 WHERE id = $2`,
-    [is_active ? 1 : 0, id]
-  );
-
-  return NextResponse.json({ success: true });
 }
 
 export async function DELETE(req: NextRequest) {
-  const cookieStore = await cookies();
-  const user = getSessionUser(cookieStore);
-  if (!user?.is_admin) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+  try {
+    const cookieStore = await cookies();
+    const user = getSessionUser(cookieStore);
+    if (!user?.is_admin) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    }
+
+    const { id } = await req.json();
+    await rawQueryOrThrow(`DELETE FROM announcements WHERE id = $1`, [id]);
+
+    return NextResponse.json({ success: true });
+  } catch (e: unknown) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to delete announcement' }, { status: 500 });
   }
-
-  const { id } = await req.json();
-  await rawQueryOrThrow(`DELETE FROM announcements WHERE id = $1`, [id]);
-
-  return NextResponse.json({ success: true });
 }

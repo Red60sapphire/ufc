@@ -66,7 +66,7 @@ export default async function FighterPage({ params }: { params: Promise<{ id: st
 
               <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mt-6">
                 <Link
-                  href={`/head-to-head?f1=${id}`}
+                  href={`/head-to-head?fighter=${encodeURIComponent(athlete.name)}`}
                   className="bg-ufc-red text-white px-5 py-2 text-xs uppercase tracking-wider font-bold rounded-full hover:bg-red-700 transition shadow-lg shadow-red-900/30"
                 >
                   Compare Fighter
@@ -166,7 +166,7 @@ export default async function FighterPage({ params }: { params: Promise<{ id: st
 
         <div className="mt-8 text-center">
           <Link
-            href={`/head-to-head?f1=${id}`}
+            href={`/head-to-head?fighter=${encodeURIComponent(athlete.name)}`}
             className="inline-flex items-center gap-2 text-ufc-red text-xs uppercase tracking-wider font-semibold hover:text-red-300 transition group"
           >
             <svg className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
