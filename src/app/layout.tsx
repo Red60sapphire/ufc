@@ -22,6 +22,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="en" className="h-full">
+      <head>
+        <script async src="https://www.googletagmanager.com/gtag/js?id=G-82BZ6YWQ2R" />
+        <script dangerouslySetInnerHTML={{
+          __html: `window.dataLayer = window.dataLayer || []; function gtag(){dataLayer.push(arguments);} gtag('js', new Date()); gtag('config', 'G-82BZ6YWQ2R');`,
+        }} />
+      </head>
       <body className="min-h-full flex flex-col bg-[#0a0a0a] text-white antialiased">
         <ToastProvider>
           <Navbar user={user} />
