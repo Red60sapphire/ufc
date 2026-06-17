@@ -44,7 +44,7 @@ export default async function HomePage() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-8 space-y-12">
+      <div className="max-w-7xl mx-auto px-4 py-8 space-y-16">
         <section className="animate-in stagger-1">
           <HeroSection mainEvent={mainEvent} />
         </section>
@@ -70,16 +70,31 @@ export default async function HomePage() {
         )}
 
         <section className="animate-in stagger-3">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-gray-800/50 to-transparent" />
+            <span className="text-gray-500 text-xs uppercase tracking-[0.3em] font-semibold">Fight Card</span>
+            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-gray-800/50 to-transparent" />
+          </div>
           <FightCardPanel fights={fights} />
         </section>
 
         {events.length > 1 && (
           <section className="animate-in stagger-4">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="h-px flex-1 bg-gradient-to-r from-transparent via-gray-800/50 to-transparent" />
+              <span className="text-gray-500 text-xs uppercase tracking-[0.3em] font-semibold">Upcoming Events</span>
+              <div className="h-px flex-1 bg-gradient-to-r from-transparent via-gray-800/50 to-transparent" />
+            </div>
             <UpcomingEventsCarousel events={events.slice(1)} />
           </section>
         )}
 
         <section className="animate-in stagger-5">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-gray-800/50 to-transparent" />
+            <span className="text-gray-500 text-xs uppercase tracking-[0.3em] font-semibold">Stats &amp; News</span>
+            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-gray-800/50 to-transparent" />
+          </div>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <FighterCard fighter={featuredFighter} />
             <NewsPanel news={news} />
@@ -88,13 +103,26 @@ export default async function HomePage() {
         </section>
 
         {streams.length > 0 && (
-          <section className="animate-in stagger-5">
-            <StreamSection streams={streams} />
-          </section>
+          <>
+            <div className="glow-line" />
+            <section className="animate-in stagger-5">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="h-px flex-1 bg-gradient-to-r from-transparent via-gray-800/50 to-transparent" />
+                <span className="text-gray-500 text-xs uppercase tracking-[0.3em] font-semibold">Live Streams</span>
+                <div className="h-px flex-1 bg-gradient-to-r from-transparent via-gray-800/50 to-transparent" />
+              </div>
+              <StreamSection streams={streams} />
+            </section>
+          </>
         )}
 
         {streams.length > 0 && (
           <section className="animate-in stagger-5">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="h-px flex-1 bg-gradient-to-r from-transparent via-gray-800/50 to-transparent" />
+              <span className="text-gray-500 text-xs uppercase tracking-[0.3em] font-semibold">Chat</span>
+              <div className="h-px flex-1 bg-gradient-to-r from-transparent via-gray-800/50 to-transparent" />
+            </div>
             <ChatBox streams={streams} />
           </section>
         )}
@@ -105,7 +133,7 @@ export default async function HomePage() {
 
 function FighterCard({ fighter }: { fighter: any }) {
   return (
-    <div className="bg-gradient-to-b from-[#1a1a1a] to-[#111] border border-gray-800 rounded-2xl overflow-hidden card-hover">
+    <div className="bg-gradient-to-b from-[#1a1a1a] to-[#111] border border-gray-800 rounded-2xl overflow-hidden card-hover group">
       <div className="bg-gradient-to-r from-ufc-red/10 to-transparent px-5 py-4 border-b border-gray-800">
         <div className="flex items-center gap-2">
           <div className="w-1 h-4 bg-ufc-red rounded-full" />
@@ -114,9 +142,9 @@ function FighterCard({ fighter }: { fighter: any }) {
       </div>
       <div className="p-6">
         <div className="flex items-center gap-4">
-          <div className="relative w-20 h-20 rounded-full overflow-hidden flex-shrink-0 ring-2 ring-gray-700 shadow-lg">
+          <div className="relative w-20 h-20 rounded-full overflow-hidden flex-shrink-0 ring-2 ring-gray-700 shadow-lg group-hover:ring-ufc-red/30 transition-all duration-500">
             {fighter.image ? (
-              <img src={fighter.image} alt={fighter.name} className="w-full h-full object-cover" />
+              <img src={fighter.image} alt={fighter.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-ufc-red/30 to-gray-800 flex items-center justify-center text-2xl font-bold text-white">
                 {fighter.name?.charAt(0)}
@@ -125,7 +153,7 @@ function FighterCard({ fighter }: { fighter: any }) {
             <div className="absolute inset-0 rounded-full ring-1 ring-white/10" />
           </div>
           <div>
-            <h4 className="text-white text-lg font-bold">{fighter.name}</h4>
+            <h4 className="text-white text-lg font-bold group-hover:text-ufc-red transition-colors">{fighter.name}</h4>
             {fighter.nickname && <p className="text-ufc-gold text-xs">&ldquo;{fighter.nickname}&rdquo;</p>}
             <p className="text-gray-500 text-xs mt-1 flex items-center gap-1">
               <span>{fighter.weight_class}</span>

@@ -5,19 +5,25 @@ export default async function NewsPage() {
 
   return (
     <div className="bg-[#0a0a0a] min-h-screen pt-16">
-      <div className="border-b border-gray-800/50 bg-gradient-to-r from-ufc-red/5 to-transparent">
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <h1 className="text-white text-xl md:text-2xl font-bold uppercase tracking-wider">UFC News</h1>
-          <p className="text-gray-500 text-sm mt-1">Latest stories and updates from the octagon</p>
+      <div className="relative py-16 md:py-20 overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(210,10,10,0.08),transparent_60%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom,rgba(212,168,67,0.03),transparent_50%)]" />
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-ufc-red/50 to-transparent" />
+        <div className="relative max-w-7xl mx-auto px-4 text-center">
+          <span className="inline-block bg-ufc-red/10 text-ufc-red text-[10px] uppercase tracking-[0.2em] font-semibold px-4 py-1.5 rounded-full border border-ufc-red/20 mb-3">Coverage</span>
+          <h1 className="text-white text-3xl md:text-4xl font-bold uppercase tracking-tight">UFC News</h1>
+          <p className="text-gray-500 text-sm mt-2">Latest stories and updates from the octagon</p>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="max-w-7xl mx-auto px-4 pb-16">
         {news.length === 0 ? (
           <div className="text-center py-20">
-            <svg className="w-16 h-16 text-gray-800 mx-auto mb-4" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
-            </svg>
+            <div className="w-16 h-16 bg-gray-900 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-gray-700" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+              </svg>
+            </div>
             <p className="text-gray-500 text-sm">No news articles available.</p>
           </div>
         ) : (
