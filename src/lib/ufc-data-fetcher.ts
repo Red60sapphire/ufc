@@ -90,24 +90,35 @@ export async function getUpcomingEvents(limit = 6): Promise<ESPNEvent[]> {
   try {
     const data = await espnFetch(`${ESP_BASE}/scoreboard`);
     const events = data?.events || [];
-    return events.slice(0, limit).map((e: any) => ({
-      id: e.id,
-      name: e.name,
-      date: e.date,
-      venue: e.competitions?.[0]?.venue?.fullName,
-      location: `${e.competitions?.[0]?.venue?.address?.city || ''}, ${e.competitions?.[0]?.venue?.address?.state || ''}`.replace(/^,\s*$/, ''),
-      status: e.competitions?.[0]?.status?.type?.description,
-      fights: e.competitions?.map((c: any) => ({
-        id: c.id,
-        fighter1: c.competitors?.[0]?.athlete?.displayName,
-        fighter2: c.competitors?.[1]?.athlete?.displayName,
-        fighter1Record: c.competitors?.[0]?.record,
-        fighter2Record: c.competitors?.[1]?.record,
-        fighter1Img: c.competitors?.[0]?.athlete?.flag?.href,
-        fighter2Img: c.competitors?.[1]?.athlete?.flag?.href,
-        weightClass: c.weightClass || c.description,
-      })),
-    }));
+    return events.slice(0, limit).map((e: any) => {
+      const c = e.competitions?.[0];
+      const f1 = c?.competitors?.[0]?.athlete;
+      const f2 = c?.competitors?.[1]?.athlete;
+      return {
+        id: e.id,
+        name: e.name,
+        date: e.date,
+        venue: c?.venue?.fullName,
+        location: `${c?.venue?.address?.city || ''}, ${c?.venue?.address?.state || ''}`.replace(/^,\s*$/, ''),
+        status: c?.status?.type?.description,
+        fighter1: f1?.displayName,
+        fighter2: f2?.displayName,
+        fighter1Record: c?.competitors?.[0]?.record,
+        fighter2Record: c?.competitors?.[1]?.record,
+        fighter1Img: f1?.id ? `https://a.espncdn.com/i/headshots/mma/players/full/${f1.id}.png` : undefined,
+        fighter2Img: f2?.id ? `https://a.espncdn.com/i/headshots/mma/players/full/${f2.id}.png` : undefined,
+        fights: e.competitions?.map((c: any) => ({
+          id: c.id,
+          fighter1: c.competitors?.[0]?.athlete?.displayName,
+          fighter2: c.competitors?.[1]?.athlete?.displayName,
+          fighter1Record: c.competitors?.[0]?.record,
+          fighter2Record: c.competitors?.[1]?.record,
+          fighter1Img: c.competitors?.[0]?.athlete?.id ? `https://a.espncdn.com/i/headshots/mma/players/full/${c.competitors[0].athlete.id}.png` : undefined,
+          fighter2Img: c.competitors?.[1]?.athlete?.id ? `https://a.espncdn.com/i/headshots/mma/players/full/${c.competitors[1].athlete.id}.png` : undefined,
+          weightClass: c.weightClass || c.description,
+        })),
+      };
+    });
   } catch {
     return [];
   }
@@ -126,8 +137,8 @@ export async function getFightCard(eventId: string): Promise<{ main: any[]; prel
       fighter2: c.competitors?.[1]?.athlete?.displayName || 'TBD',
       fighter1Record: c.competitors?.[0]?.record || 'N/A',
       fighter2Record: c.competitors?.[1]?.record || 'N/A',
-      fighter1Img: c.competitors?.[0]?.athlete?.flag?.href,
-      fighter2Img: c.competitors?.[1]?.athlete?.flag?.href,
+      fighter1Img: c.competitors?.[0]?.athlete?.id ? `https://a.espncdn.com/i/headshots/mma/players/full/${c.competitors[0].athlete.id}.png` : undefined,
+      fighter2Img: c.competitors?.[1]?.athlete?.id ? `https://a.espncdn.com/i/headshots/mma/players/full/${c.competitors[1].athlete.id}.png` : undefined,
       weightClass: c.description || c.weightClass || '',
     }));
 

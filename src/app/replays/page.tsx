@@ -18,18 +18,26 @@ export default async function ReplaysPage() {
                   <div className="flex items-center justify-center gap-4 mb-4">
                     <div className="text-center">
                       <div className="w-16 h-16 rounded-full bg-gray-800 mx-auto overflow-hidden border-2 border-gray-700">
-                        <div className="w-full h-full bg-gradient-to-br from-ufc-red/20 to-gray-800 flex items-center justify-center text-white text-xs font-bold">
-                          {replay.fighter1?.split(' ').map((n: string) => n[0]).join('') || '?'}
-                        </div>
+                        {replay.fighter1_img ? (
+                          <img src={replay.fighter1_img} alt={replay.fighter1} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-ufc-red/20 to-gray-800 flex items-center justify-center text-white text-xs font-bold">
+                            {replay.fighter1?.split(' ').map((n: string) => n[0]).join('') || '?'}
+                          </div>
+                        )}
                       </div>
                       <p className="text-white text-xs font-semibold mt-2 max-w-[100px] truncate">{replay.fighter1}</p>
                     </div>
                     <span className="text-ufc-red text-lg font-black">VS</span>
                     <div className="text-center">
                       <div className="w-16 h-16 rounded-full bg-gray-800 mx-auto overflow-hidden border-2 border-gray-700">
-                        <div className="w-full h-full bg-gradient-to-br from-ufc-red/20 to-gray-800 flex items-center justify-center text-white text-xs font-bold">
-                          {replay.fighter2?.split(' ').map((n: string) => n[0]).join('') || '?'}
-                        </div>
+                        {replay.fighter2_img ? (
+                          <img src={replay.fighter2_img} alt={replay.fighter2} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-ufc-red/20 to-gray-800 flex items-center justify-center text-white text-xs font-bold">
+                            {replay.fighter2?.split(' ').map((n: string) => n[0]).join('') || '?'}
+                          </div>
+                        )}
                       </div>
                       <p className="text-white text-xs font-semibold mt-2 max-w-[100px] truncate">{replay.fighter2}</p>
                     </div>

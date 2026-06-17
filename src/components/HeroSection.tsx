@@ -20,9 +20,13 @@ export default function HeroSection({ mainEvent }: HeroProps) {
         <div className="flex items-center justify-center gap-4 md:gap-8">
           <div className="text-center flex-1">
             <div className="w-24 h-24 md:w-36 md:h-36 rounded-full bg-gray-800 mx-auto overflow-hidden border-2 border-gray-700">
-              <div className="w-full h-full bg-gradient-to-br from-ufc-red/20 to-gray-800 flex items-center justify-center text-white font-bold text-lg md:text-2xl">
-                {mainEvent.fighter1.split(' ').map((n: string) => n[0]).join('')}
-              </div>
+              {mainEvent.fighter1Img ? (
+                <img src={mainEvent.fighter1Img} alt={mainEvent.fighter1} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-ufc-red/20 to-gray-800 flex items-center justify-center text-white font-bold text-lg md:text-2xl">
+                  {mainEvent.fighter1.split(' ').map((n: string) => n[0]).join('')}
+                </div>
+              )}
             </div>
             <p className="text-white font-bold text-sm md:text-lg mt-3">{mainEvent.fighter1}</p>
             <p className="text-gray-400 text-xs">{mainEvent.fighter1Record}</p>
@@ -35,9 +39,13 @@ export default function HeroSection({ mainEvent }: HeroProps) {
 
           <div className="text-center flex-1">
             <div className="w-24 h-24 md:w-36 md:h-36 rounded-full bg-gray-800 mx-auto overflow-hidden border-2 border-gray-700">
-              <div className="w-full h-full bg-gradient-to-br from-ufc-red/20 to-gray-800 flex items-center justify-center text-white font-bold text-lg md:text-2xl">
-                {mainEvent.fighter2.split(' ').map((n: string) => n[0]).join('')}
-              </div>
+              {mainEvent.fighter2Img ? (
+                <img src={mainEvent.fighter2Img} alt={mainEvent.fighter2} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-ufc-red/20 to-gray-800 flex items-center justify-center text-white font-bold text-lg md:text-2xl">
+                  {mainEvent.fighter2.split(' ').map((n: string) => n[0]).join('')}
+                </div>
+              )}
             </div>
             <p className="text-white font-bold text-sm md:text-lg mt-3">{mainEvent.fighter2}</p>
             <p className="text-gray-400 text-xs">{mainEvent.fighter2Record}</p>

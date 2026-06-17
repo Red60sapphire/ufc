@@ -28,9 +28,31 @@ export default async function EventsPage() {
                     <div className="mt-4 space-y-2">
                       {event.fights.slice(0, 3).map((fight: any, i: number) => (
                         <div key={i} className="flex items-center justify-between bg-[#1a1a1a] rounded p-2">
-                          <span className="text-gray-300 text-xs font-medium truncate max-w-[40%]">{fight.fighter1 || fight.fighter1Name}</span>
+                          <div className="flex items-center gap-2 max-w-[40%]">
+                            <div className="w-6 h-6 rounded-full bg-gray-800 overflow-hidden flex-shrink-0">
+                              {fight.fighter1Img ? (
+                                <img src={fight.fighter1Img} alt={fight.fighter1} className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-gray-500 text-[8px] font-bold">
+                                  {fight.fighter1?.charAt(0)}
+                                </div>
+                              )}
+                            </div>
+                            <span className="text-gray-300 text-xs font-medium truncate">{fight.fighter1 || fight.fighter1Name}</span>
+                          </div>
                           <span className="text-ufc-red text-[10px] font-bold mx-1">VS</span>
-                          <span className="text-gray-300 text-xs font-medium truncate max-w-[40%]">{fight.fighter2 || fight.fighter2Name}</span>
+                          <div className="flex items-center gap-2 max-w-[40%] justify-end">
+                            <span className="text-gray-300 text-xs font-medium truncate">{fight.fighter2 || fight.fighter2Name}</span>
+                            <div className="w-6 h-6 rounded-full bg-gray-800 overflow-hidden flex-shrink-0">
+                              {fight.fighter2Img ? (
+                                <img src={fight.fighter2Img} alt={fight.fighter2} className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-gray-500 text-[8px] font-bold">
+                                  {fight.fighter2?.charAt(0)}
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       ))}
                     </div>

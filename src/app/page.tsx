@@ -24,10 +24,10 @@ export default async function HomePage() {
   const mainEvent = {
     fighter1: (event as any)?.fighter1 || ufcConfig.current_event.main_event.fighter1,
     fighter2: (event as any)?.fighter2 || ufcConfig.current_event.main_event.fighter2,
-    fighter1Img: ufcConfig.current_event.main_event.fighter1_img,
-    fighter2Img: ufcConfig.current_event.main_event.fighter2_img,
-    fighter1Record: ufcConfig.current_event.main_event.fighter1_record,
-    fighter2Record: ufcConfig.current_event.main_event.fighter2_record,
+    fighter1Img: (event as any)?.fighter1Img || ufcConfig.current_event.main_event.fighter1_img,
+    fighter2Img: (event as any)?.fighter2Img || ufcConfig.current_event.main_event.fighter2_img,
+    fighter1Record: (event as any)?.fighter1Record || ufcConfig.current_event.main_event.fighter1_record,
+    fighter2Record: (event as any)?.fighter2Record || ufcConfig.current_event.main_event.fighter2_record,
     weightClass: ufcConfig.current_event.main_event.weight_class,
     date: event.date,
     venue: event.venue || '',
@@ -51,7 +51,7 @@ export default async function HomePage() {
 
           <NewsPanel news={news} />
 
-          <TaleOfTheTape fighter1={mainEvent.fighter1} fighter2={mainEvent.fighter2} />
+          <TaleOfTheTape fighter1={mainEvent.fighter1} fighter2={mainEvent.fighter2} fighter1Img={mainEvent.fighter1Img} fighter2Img={mainEvent.fighter2Img} fighter1Record={mainEvent.fighter1Record} fighter2Record={mainEvent.fighter2Record} />
         </div>
 
         {streams.length > 0 && <StreamSection streams={streams} />}
