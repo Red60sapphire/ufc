@@ -35,8 +35,8 @@ async function queryRaw(strings: TemplateStringsArray, ...params: any[]) {
 }
 
 export async function rawQueryOrThrow(sql: string, params?: any[]) {
-  const db = getDb();
-  return (await (db as any)(sql, params || [])) as any[];
+  const db = getDb() as any;
+  return (await db.query(sql, params || [])) as any[];
 }
 
 export async function initDb() {
@@ -103,7 +103,7 @@ export async function initDb() {
     'ALTER TABLE ufc_replays ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
   ];
   for (const m of migs) {
-    try { await (db as any)(m); } catch (e: any) { if (!e.message?.includes('already exists')) throw e; }
+    try { await (db as any).query(m); } catch (e: any) { if (!e.message?.includes('already exists')) throw e; }
   }
   const adminExists = await queryRaw`SELECT COUNT(*) as count FROM users WHERE username = 'admin'`;
   if (adminExists[0]?.count === '0' || adminExists[0]?.count === 0) {
