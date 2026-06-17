@@ -16,7 +16,7 @@ export default function VideoPlayer({ src, poster, className = '' }: VideoPlayer
 
   useEffect(() => {
     if (!src) return;
-    const isHlsStream = src.includes('.m3u8');
+    const isHlsStream = src.includes('.m3u8') || src.includes('/play/clip/') || src.includes('/play/file/') || src.includes('/play/seg');
     setIsHls(isHlsStream);
 
     if (isHlsStream) {
