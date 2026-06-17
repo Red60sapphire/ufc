@@ -29,8 +29,13 @@ export async function query(strings: TemplateStringsArray, ...params: any[]): Pr
   }
 }
 
+async function queryRaw(strings: TemplateStringsArray, ...params: any[]) {
+  const db = getDb();
+  return (await db(strings, ...params)) as any[];
+}
+
 export async function initDb() {
-  await query`
+  await queryRaw`
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
       username TEXT UNIQUE NOT NULL,
@@ -40,7 +45,7 @@ export async function initDb() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `;
-  await query`
+  await queryRaw`
     CREATE TABLE IF NOT EXISTS streams (
       id SERIAL PRIMARY KEY,
       title TEXT NOT NULL,
@@ -52,7 +57,7 @@ export async function initDb() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `;
-  await query`
+  await queryRaw`
     CREATE TABLE IF NOT EXISTS chat_messages (
       id SERIAL PRIMARY KEY,
       stream_id INTEGER NOT NULL REFERENCES streams(id) ON DELETE CASCADE,
@@ -61,7 +66,7 @@ export async function initDb() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `;
-  await query`
+  await queryRaw`
     CREATE TABLE IF NOT EXISTS ufc_replays (
       id SERIAL PRIMARY KEY,
       fighter1 TEXT,
@@ -73,11 +78,11 @@ export async function initDb() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `;
-  const adminExists = await query`SELECT COUNT(*) as count FROM users WHERE username = 'admin'`;
-  if (adminExists[0]?.count === 0) {
+  const adminExists = await queryRaw`SELECT COUNT(*) as count FROM users WHERE username = 'admin'`;
+  if (adminExists[0]?.count === '0' || adminExists[0]?.count === 0) {
     const bcrypt = await import('bcryptjs');
     const hashedPassword = await bcrypt.hash('admin123', 10);
-    await query`
+    await queryRaw`
       INSERT INTO users (username, email, password, is_admin)
       VALUES ('admin', 'admin@streaming.com', ${hashedPassword}, 1)
     `;
