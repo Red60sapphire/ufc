@@ -1,4 +1,5 @@
 import { getEventsWithFightCards } from "@/lib/ufc-data-fetcher";
+import Link from "next/link";
 
 export default async function EventsPage() {
   const events = await getEventsWithFightCards(12);
@@ -83,9 +84,9 @@ export default async function EventsPage() {
                     </div>
                   )}
 
-                  <button className="w-full border border-gray-700/50 text-gray-400 py-2.5 text-xs uppercase tracking-wider rounded-xl hover:bg-white/5 hover:border-gray-600 hover:text-white transition-all duration-300">
+                  <Link href={`/events/${event.id}`} className="block w-full border border-gray-700/50 text-gray-400 py-2.5 text-xs uppercase tracking-wider rounded-xl hover:bg-white/5 hover:border-gray-600 hover:text-white transition-all duration-300 text-center">
                     View Full Card
-                  </button>
+                  </Link>
                 </div>
               </div>
             ))}

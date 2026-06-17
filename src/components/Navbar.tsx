@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { usePathname } from 'next/navigation';
 import LoginModal from './LoginModal';
 
@@ -12,6 +12,7 @@ interface NavbarProps {
 const navLinks = [
   { href: '/', label: 'Home' },
   { href: '/events', label: 'Events' },
+  { href: '/fighters', label: 'Fighters' },
   { href: '/rankings', label: 'Rankings' },
   { href: '/news', label: 'News' },
   { href: '/replays', label: 'Replays' },
@@ -24,6 +25,8 @@ export default function Navbar({ user: initialUser }: NavbarProps) {
   const [user, setUser] = useState(initialUser);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [fighterResults, setFighterResults] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
   const pathname = usePathname();
 
   useEffect(() => {
@@ -47,10 +50,26 @@ export default function Navbar({ user: initialUser }: NavbarProps) {
     window.location.reload();
   };
 
-  const searchResults = searchQuery.trim()
+  useEffect(() => {
+    if (searchQuery.trim().length < 2) { setFighterResults([]); return; }
+    setSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/fighters?search=${encodeURIComponent(searchQuery)}`);
+        const data = await res.json();
+        setFighterResults(data.data?.slice(0, 5) || []);
+      } catch {}
+      setSearching(false);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const pageResults = searchQuery.trim()
     ? navLinks.filter(l => l.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
         l.href.toLowerCase().includes(searchQuery.toLowerCase()))
     : [];
+
+  const hasResults = pageResults.length > 0 || fighterResults.length > 0;
 
   return (
     <>
@@ -76,7 +95,7 @@ export default function Navbar({ user: initialUser }: NavbarProps) {
             </div>
 
             <div className="hidden md:flex items-center gap-2">
-              <button onClick={() => setSearchOpen(true)} className="text-gray-400 hover:text-white p-2 transition" title="Search">
+              <button onClick={() => setSearchOpen(true)} className="text-gray-400 hover:text-white p-2 transition" title="Search fighters, pages...">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
               </button>
               {user ? (
@@ -118,6 +137,7 @@ export default function Navbar({ user: initialUser }: NavbarProps) {
                 {l.label}
               </Link>
             ))}
+            <Link href="/head-to-head" className="block text-gray-400 text-sm uppercase py-2 px-3 rounded-lg hover:text-white hover:bg-white/[0.03] transition">Head to Head</Link>
             <a href="https://discord.gg/Dh2gUUgYTg" target="_blank" rel="noopener noreferrer" className="block text-gray-400 text-sm uppercase py-2 px-3 rounded-lg hover:text-white hover:bg-white/[0.03] transition">Discord</a>
             <hr className="border-gray-800 my-2" />
             {user ? (
@@ -147,21 +167,44 @@ export default function Navbar({ user: initialUser }: NavbarProps) {
                 <input
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search pages..."
+                  placeholder="Search fighters, pages..."
                   autoFocus
                   className="w-full bg-transparent text-white text-sm px-3 py-4 focus:outline-none placeholder-gray-600"
                 />
+                {searching && <div className="w-4 h-4 border-2 border-ufc-red border-t-transparent rounded-full animate-spin flex-shrink-0" />}
                 <button onClick={() => { setSearchOpen(false); setSearchQuery(''); }} className="text-gray-500 hover:text-white text-xs p-1">&times;</button>
               </div>
               {searchQuery.trim() && (
-                <div className="p-2">
-                  {searchResults.length > 0 ? searchResults.map(r => (
-                    <Link key={r.href} href={r.href} onClick={() => { setSearchOpen(false); setSearchQuery(''); }} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition text-sm">
-                      <span className="text-gray-400">{r.label}</span>
-                      <span className="text-gray-600 text-[10px] ml-auto">{r.href}</span>
-                    </Link>
-                  )) : (
-                    <p className="text-gray-500 text-xs text-center py-6">No results found</p>
+                <div className="p-2 max-h-80 overflow-y-auto">
+                  {fighterResults.length > 0 && (
+                    <div className="mb-2">
+                      <p className="text-gray-600 text-[10px] uppercase tracking-wider px-3 py-1 font-semibold">Fighters</p>
+                      {fighterResults.map((f: any) => (
+                        <Link key={f.id} href={`/fighter/${f.id}`} onClick={() => { setSearchOpen(false); setSearchQuery(''); }} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition text-sm">
+                          <div className="w-8 h-8 rounded-full bg-gray-800 overflow-hidden flex-shrink-0">
+                            {f.image ? <img src={f.image} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-600 text-xs font-bold">{f.name.charAt(0)}</div>}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-white text-xs font-semibold truncate block">{f.name}</span>
+                            <span className="text-gray-500 text-[10px]">{f.record || ''} {f.weightClass ? `• ${f.weightClass}` : ''}</span>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                  {pageResults.length > 0 && (
+                    <div>
+                      <p className="text-gray-600 text-[10px] uppercase tracking-wider px-3 py-1 font-semibold">Pages</p>
+                      {pageResults.map(r => (
+                        <Link key={r.href} href={r.href} onClick={() => { setSearchOpen(false); setSearchQuery(''); }} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition text-sm">
+                          <span className="text-gray-400">{r.label}</span>
+                          <span className="text-gray-600 text-[10px] ml-auto">{r.href}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                  {!hasResults && !searching && (
+                    <p className="text-gray-500 text-xs text-center py-6">No results found for &ldquo;{searchQuery}&rdquo;</p>
                   )}
                 </div>
               )}
