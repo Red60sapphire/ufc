@@ -29,8 +29,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const forceScrape = searchParams.get('force') === '1';
-    const countRows = await rawQueryOrThrow('SELECT COUNT(*) as count FROM ufc_replays', []);
-    if (forceScrape || parseInt(countRows[0]?.count || '0') === 0) {
+    const countRows = await query`SELECT COUNT(*) as count FROM ufc_replays`;
+    if (forceScrape || (countRows.length === 0 || parseInt(countRows[0]?.count || '0') === 0)) {
       const result = await scrapeAll();
       if (result.errors.length > 0) {
         console.error('Auto-scrape errors:', JSON.stringify(result.errors));
@@ -65,18 +65,23 @@ export async function GET(request: NextRequest) {
     else if (sort === 'views') orderBy = 'ORDER BY views DESC';
     else if (sort === 'event_date') orderBy = 'ORDER BY event_date DESC NULLS LAST';
 
-    const replays = await rawQueryOrThrow(
-      `SELECT * FROM ufc_replays ${where} ${orderBy} LIMIT ${limit} OFFSET ${offset}`,
-      params
-    );
-    const countResult = await rawQueryOrThrow(
-      `SELECT COUNT(*) as count FROM ufc_replays ${where}`,
-      params
-    );
+    let replays: any[] = [];
+    let total = 0;
+    try {
+      replays = await rawQueryOrThrow(
+        `SELECT * FROM ufc_replays ${where} ${orderBy} LIMIT ${limit} OFFSET ${offset}`,
+        params
+      );
+      const countResult = await rawQueryOrThrow(
+        `SELECT COUNT(*) as count FROM ufc_replays ${where}`,
+        params
+      );
+      total = countResult[0]?.count || 0;
+    } catch {}
 
-    return NextResponse.json({ replays, total: countResult[0]?.count || 0 });
+    return NextResponse.json({ replays, total });
   } catch (err) {
-    return NextResponse.json({ success: false, error: 'Server error' }, { status: 500 });
+    return NextResponse.json({ replays: [], total: 0 });
   }
 }
 
