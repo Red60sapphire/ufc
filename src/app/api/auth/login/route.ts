@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { loginUser } from '@/lib/auth';
-import { cookies } from 'next/headers';
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,8 +14,8 @@ export async function POST(request: NextRequest) {
     const sessionData = { id: user.id, username: user.username, is_admin: user.is_admin };
     const sessionStr = Buffer.from(JSON.stringify(sessionData)).toString('base64');
 
-    const cookieStore = await cookies();
-    cookieStore.set('session', sessionStr, {
+    const response = NextResponse.json({ success: true, user: sessionData });
+    response.cookies.set('session', sessionStr, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
@@ -24,7 +23,7 @@ export async function POST(request: NextRequest) {
       maxAge: 60 * 60 * 24 * 7,
     });
 
-    return NextResponse.json({ success: true, user: sessionData });
+    return response;
   } catch (err) {
     return NextResponse.json({ success: false, error: 'Server error' }, { status: 500 });
   }
