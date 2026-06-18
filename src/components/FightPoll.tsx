@@ -93,7 +93,7 @@ export default function FightPoll({
       <div className="bg-gradient-to-r from-ufc-red/10 to-transparent px-5 py-4 border-b border-gray-800/60 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-1 h-4 bg-ufc-red rounded-full" />
-          <h3 className="text-ufc-red text-xs uppercase tracking-wider font-semibold">Who Wins?</h3>
+          <h3 className="text-ufc-red text-xs uppercase tracking-wider font-semibold">WHO WILL WIN THE NEXT EVENT?</h3>
         </div>
         <span className="text-gray-600 text-[9px]">{weightClass?.split(' ')[0] || ''}</span>
       </div>

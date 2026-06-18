@@ -107,6 +107,20 @@ export default async function HomePage() {
           </div>
         </section>
 
+        <section className="animate-in stagger-2 max-w-xl mx-auto w-full">
+          <FightPoll
+            fighter1={mainEvent.fighter1}
+            fighter2={mainEvent.fighter2}
+            fighter1Img={mainEvent.fighter1Img}
+            fighter2Img={mainEvent.fighter2Img}
+            fighter1Record={mainEvent.fighter1Record}
+            fighter2Record={mainEvent.fighter2Record}
+            f1Id={fighter1Id}
+            f2Id={fighter2Id}
+            weightClass={mainEvent.weightClass}
+          />
+        </section>
+
         {mainEvent.date && (
           <section className="animate-in stagger-2">
             <div className="relative bg-gradient-to-b from-[#1a1a1a] to-[#111] border border-gray-800/60 rounded-2xl p-6 card-hover overflow-hidden group">
@@ -143,20 +157,6 @@ export default async function HomePage() {
             <Link href={`/events/${mainEvent.eventId}`} className="text-ufc-red text-xs uppercase tracking-wider font-semibold hover:text-red-300 transition">Full Card →</Link>
           </SectionHeader>
           <FightCardPanel fights={fights} />
-        </section>
-
-        <section className="animate-in stagger-3 max-w-xl mx-auto w-full">
-          <FightPoll
-            fighter1={mainEvent.fighter1}
-            fighter2={mainEvent.fighter2}
-            fighter1Img={mainEvent.fighter1Img}
-            fighter2Img={mainEvent.fighter2Img}
-            fighter1Record={mainEvent.fighter1Record}
-            fighter2Record={mainEvent.fighter2Record}
-            f1Id={fighter1Id}
-            f2Id={fighter2Id}
-            weightClass={mainEvent.weightClass}
-          />
         </section>
 
         {champions.length > 1 && (
