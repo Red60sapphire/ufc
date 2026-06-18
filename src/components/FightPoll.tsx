@@ -17,14 +17,6 @@ interface FightPollProps {
 
 const STORAGE_KEY = 'ufc_poll_vote';
 
-function getWinPct(record: string): number {
-  const parts = record?.split('-').map(Number) || [0, 0];
-  if (!parts[0] && !parts[1]) return 50;
-  const total = parts[0] + parts[1];
-  if (total === 0) return 50;
-  return Math.round((parts[0] / total) * 100);
-}
-
 export default function FightPoll({
   fighter1, fighter2, fighter1Img, fighter2Img,
   fighter1Record, fighter2Record, f1Id, f2Id, weightClass,
@@ -43,27 +35,11 @@ export default function FightPoll({
         if (parsed.fighter1 === fighter1 && parsed.fighter2 === fighter2) {
           setVoted(parsed.vote);
           setResults(parsed.results || { f1: 0, f2: 0, total: 0 });
-        } else {
-          seedResults();
         }
-      } catch {
-        seedResults();
-      }
-    } else {
-      seedResults();
+      } catch {}
     }
     setTimeout(() => setAnim(true), 300);
   }, [fighter1, fighter2]);
-
-  function seedResults() {
-    const p1 = getWinPct(fighter1Record);
-    const p2 = getWinPct(fighter2Record);
-    const total = 100;
-    const raw = p1 / (p1 + p2) * total;
-    const f1 = Math.round(raw);
-    const f2 = total - f1;
-    setResults({ f1, f2, total });
-  }
 
   function handleVote(fighter: 'f1' | 'f2') {
     if (voted) return;
@@ -93,9 +69,12 @@ export default function FightPoll({
       <div className="bg-gradient-to-r from-ufc-red/10 to-transparent px-5 py-4 border-b border-gray-800/60 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-1 h-4 bg-ufc-red rounded-full" />
-          <h3 className="text-ufc-red text-xs uppercase tracking-wider font-semibold">WHO WILL WIN THE NEXT EVENT?</h3>
+          <h3 className="text-ufc-red text-xs uppercase tracking-wider font-semibold">Who will win?</h3>
         </div>
-        <span className="text-gray-600 text-[9px]">{weightClass?.split(' ')[0] || ''}</span>
+        <div className="flex items-center gap-3">
+          <span className="text-gray-500 text-[10px] font-medium">Total Votes : {results.total}</span>
+          <span className="text-gray-600 text-[9px]">{weightClass?.split(' ')[0] || ''}</span>
+        </div>
       </div>
 
       <div className="p-5">
@@ -107,8 +86,8 @@ export default function FightPoll({
               voted === 'f1'
                 ? 'bg-ufc-red/10 border-2 border-ufc-red'
                 : voted
-                  ? 'bg-white/[0.02] border border-gray-800/60 opacity-50'
-                  : 'bg-white/[0.02] border border-gray-800/60 hover:border-ufc-red/50 hover:bg-ufc-red/5'
+                  ? 'bg-white/[0.02] border border-gray-800/60 opacity-50 cursor-default'
+                  : 'bg-white/[0.02] border border-gray-800/60 hover:border-ufc-red/50 hover:bg-ufc-red/5 cursor-pointer'
             }`}
           >
             <div className="flex flex-col items-center gap-2">
@@ -133,7 +112,7 @@ export default function FightPoll({
                   <div className="h-full bg-gradient-to-r from-ufc-red to-red-400 rounded-full transition-all duration-1000 ease-out"
                     style={{ width: `${anim ? f1Pct : 0}%` }} />
                 </div>
-                <p className="text-white text-lg font-black mt-1">{f1Pct}%</p>
+                <p className="text-white text-lg font-black mt-1">{results.f1}</p>
               </div>
             )}
           </button>
@@ -142,7 +121,6 @@ export default function FightPoll({
             <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-gradient-to-b from-[#1a0000] to-[#0d0000] border border-ufc-red/20 flex items-center justify-center">
               <span className="text-ufc-red text-sm md:text-base font-black">VS</span>
             </div>
-            <p className="text-gray-600 text-[8px] uppercase tracking-wider mt-1">{results.total} votes</p>
           </div>
 
           <button
@@ -152,8 +130,8 @@ export default function FightPoll({
               voted === 'f2'
                 ? 'bg-ufc-red/10 border-2 border-ufc-red'
                 : voted
-                  ? 'bg-white/[0.02] border border-gray-800/60 opacity-50'
-                  : 'bg-white/[0.02] border border-gray-800/60 hover:border-ufc-red/50 hover:bg-ufc-red/5'
+                  ? 'bg-white/[0.02] border border-gray-800/60 opacity-50 cursor-default'
+                  : 'bg-white/[0.02] border border-gray-800/60 hover:border-ufc-red/50 hover:bg-ufc-red/5 cursor-pointer'
             }`}
           >
             <div className="flex flex-col items-center gap-2">
@@ -178,22 +156,15 @@ export default function FightPoll({
                   <div className="h-full bg-gradient-to-r from-ufc-red to-red-400 rounded-full transition-all duration-1000 ease-out"
                     style={{ width: `${anim ? f2Pct : 0}%` }} />
                 </div>
-                <p className="text-white text-lg font-black mt-1">{f2Pct}%</p>
+                <p className="text-white text-lg font-black mt-1">{results.f2}</p>
               </div>
             )}
           </button>
         </div>
 
         {!voted && (
-          <div className="text-center mt-4">
-            <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-ufc-red to-red-400 rounded-full transition-all duration-1000 ease-out"
-                style={{ width: `${anim ? getWinPct(fighter1Record) : 0}%` }} />
-            </div>
-            <div className="flex justify-between text-[9px] text-gray-600 mt-1">
-              <span>Based on win rate</span>
-              <span>Tap a fighter to vote</span>
-            </div>
+          <div className="text-center mt-5">
+            <p className="text-gray-500 text-[10px] uppercase tracking-wider">Tap a fighter to cast your vote</p>
           </div>
         )}
 
@@ -204,7 +175,6 @@ export default function FightPoll({
               onClick={() => {
                 localStorage.removeItem(STORAGE_KEY);
                 setVoted(null);
-                seedResults();
               }}
               className="text-ufc-red text-[10px] hover:text-red-300 transition font-semibold uppercase tracking-wider"
             >
