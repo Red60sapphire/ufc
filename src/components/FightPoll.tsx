@@ -169,36 +169,22 @@ export default function FightPoll({
         )}
 
         {voted && (
-          <div className="flex items-center justify-center gap-3 mt-4 pt-3 border-t border-gray-800/40">
+          <div className="text-center mt-4 pt-3 border-t border-gray-800/40">
             <p className="text-gray-500 text-[10px]">You voted for {voted === 'f1' ? fighter1 : fighter2}</p>
-            <button
-              onClick={() => {
-                localStorage.removeItem(STORAGE_KEY);
-                setVoted(null);
-              }}
-              className="text-ufc-red text-[10px] hover:text-red-300 transition font-semibold uppercase tracking-wider"
-            >
-              Vote Again
-            </button>
           </div>
         )}
 
-        <div className="flex items-center justify-center gap-2 mt-3">
-          <Link href="/head-to-head" className="text-gray-600 hover:text-gray-400 text-[9px] uppercase tracking-wider transition-colors">
-            Compare Stats →
-          </Link>
-          {f1Id && f2Id && (
-            <>
-              <span className="text-gray-800">|</span>
-              <Link href={`/fighter/${f1Id}`} className="text-gray-600 hover:text-gray-400 text-[9px] uppercase tracking-wider transition-colors">
-                {fighter1.split(' ').pop()}
-              </Link>
-              <Link href={`/fighter/${f2Id}`} className="text-gray-600 hover:text-gray-400 text-[9px] uppercase tracking-wider transition-colors">
-                {fighter2.split(' ').pop()}
-              </Link>
-            </>
-          )}
-        </div>
+        {f1Id && f2Id && (
+          <div className="flex items-center justify-center gap-2 mt-3">
+            <Link href={`/fighter/${f1Id}`} className="text-gray-600 hover:text-gray-400 text-[9px] uppercase tracking-wider transition-colors">
+              {fighter1.split(' ').pop()}
+            </Link>
+            <span className="text-gray-800">|</span>
+            <Link href={`/fighter/${f2Id}`} className="text-gray-600 hover:text-gray-400 text-[9px] uppercase tracking-wider transition-colors">
+              {fighter2.split(' ').pop()}
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   );
