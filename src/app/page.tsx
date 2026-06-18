@@ -8,6 +8,7 @@ import UpcomingEventsCarousel from "@/components/UpcomingEventsCarousel";
 import NewsPanel from "@/components/NewsPanel";
 import StreamSection from "@/components/StreamSection";
 import ChatBox from "@/components/ChatBox";
+import FightPoll from "@/components/FightPoll";
 
 export default async function HomePage() {
   const [eventsData, newsData, streams, rankingsData, replays] = await Promise.all([
@@ -142,6 +143,20 @@ export default async function HomePage() {
             <Link href={`/events/${mainEvent.eventId}`} className="text-ufc-red text-xs uppercase tracking-wider font-semibold hover:text-red-300 transition">Full Card →</Link>
           </SectionHeader>
           <FightCardPanel fights={fights} />
+        </section>
+
+        <section className="animate-in stagger-3 max-w-xl mx-auto w-full">
+          <FightPoll
+            fighter1={mainEvent.fighter1}
+            fighter2={mainEvent.fighter2}
+            fighter1Img={mainEvent.fighter1Img}
+            fighter2Img={mainEvent.fighter2Img}
+            fighter1Record={mainEvent.fighter1Record}
+            fighter2Record={mainEvent.fighter2Record}
+            f1Id={fighter1Id}
+            f2Id={fighter2Id}
+            weightClass={mainEvent.weightClass}
+          />
         </section>
 
         {champions.length > 1 && (
