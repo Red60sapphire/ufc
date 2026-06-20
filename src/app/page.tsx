@@ -7,7 +7,6 @@ import FightCardPanel from "@/components/FightCardPanel";
 import UpcomingEventsCarousel from "@/components/UpcomingEventsCarousel";
 import NewsPanel from "@/components/NewsPanel";
 import StreamSection from "@/components/StreamSection";
-import ChatBox from "@/components/ChatBox";
 import FightPoll from "@/components/FightPoll";
 
 export default async function HomePage() {
@@ -82,7 +81,19 @@ export default async function HomePage() {
           <section className="animate-in stagger-1">
             <StreamSection streams={streams} />
             <div className="mt-8">
-              <ChatBox streams={streams} />
+              <div className="bg-gradient-to-b from-[#1a1a1a] to-[#111] border border-gray-800 rounded-2xl overflow-hidden card-hover">
+                <div className="flex items-center gap-3 mb-3 px-4 py-3 border-b border-gray-800">
+                  <div className="h-4 w-1 bg-ufc-red rounded-full" />
+                  <h2 className="text-white text-sm uppercase tracking-wider font-bold">Live Chat</h2>
+                </div>
+                <iframe
+                  id="chat"
+                  src="https://studio.youtube.com/live_chat?is_popout=1&v=RlrRro00XYY&is&embed_domain=streamseast.is&dark_theme=1"
+                  frameBorder="0"
+                  scrolling="no"
+                  style={{ minHeight: '454px', width: '100%', height: '100%' }}
+                />
+              </div>
             </div>
           </section>
         ) : (
@@ -314,7 +325,15 @@ export default async function HomePage() {
             </section>
             <section className="animate-in stagger-5">
               <SectionHeader label="Chat" />
-              <ChatBox streams={streams} />
+              <div className="bg-gradient-to-b from-[#1a1a1a] to-[#111] border border-gray-800 rounded-2xl overflow-hidden card-hover">
+                <iframe
+                  id="chat"
+                  src="https://studio.youtube.com/live_chat?is_popout=1&v=RlrRro00XYY&is&embed_domain=streamseast.is&dark_theme=1"
+                  frameBorder="0"
+                  scrolling="no"
+                  style={{ minHeight: '454px', width: '100%', height: '100%' }}
+                />
+              </div>
             </section>
           </>
         )}
