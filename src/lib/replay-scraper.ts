@@ -233,7 +233,7 @@ function extractEntryDate(html: string): string | null {
 }
 
 function slugify(text: string): string {
-  return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|^-/g, '').replace(/-$/g, '');
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
 export async function scrapeAll(maxPages = 5): Promise<{
