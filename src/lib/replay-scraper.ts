@@ -1,176 +1,328 @@
 import { rawQueryOrThrow, query } from './db';
 
-const BASE = 'https://mmareplayfull.com';
-const API_BASE = 'https://api.mmareplayfull.com';
+const BASE = 'https://fullfightreplays.com';
+const MAX_RETRIES = 2;
 
-interface MEvent {
-  id: string; name: string; date: string; location: string; cover_url: string;
+async function fetchPage(url: string): Promise<string> {
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.text();
+    } catch (err: any) {
+      if (attempt === MAX_RETRIES) throw new Error(`Failed to fetch ${url}: ${err.message}`);
+      await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+    }
+  }
+  throw new Error('Unreachable');
 }
 
-interface FightData {
-  id: string; weight_class: string; method: string; round: number; fight_time: string;
-  clip: { playlist_url: string } | null; is_clip_available: boolean;
-  participants: { display_name: string; result: string; fighter: { thumbnail_url: string | null; vertical_image_url: string | null } }[];
+function extractBetween(text: string, before: string, after: string, startIdx = 0): string | null {
+  const s = text.indexOf(before, startIdx);
+  if (s === -1) return null;
+  const e = text.indexOf(after, s + before.length);
+  if (e === -1) return null;
+  return text.substring(s + before.length, e);
+}
+
+function extractAllBetween(text: string, before: string, after: string): string[] {
+  const results: string[] = [];
+  let idx = 0;
+  while (true) {
+    const s = text.indexOf(before, idx);
+    if (s === -1) break;
+    const e = text.indexOf(after, s + before.length);
+    if (e === -1) break;
+    results.push(text.substring(s + before.length, e));
+    idx = e + after.length;
+  }
+  return results;
+}
+
+interface ScrapedEntry {
+  title: string;
+  url: string;
+  thumbnail: string | null;
+  category: string;
+  views: number;
+}
+
+interface VideoEmbed {
+  platform: string;
+  url: string;
+  label: string;
+}
+
+interface ScrapedFight {
+  title: string;
+  slug: string;
+  promotion: string;
+  eventName: string;
+  fighter1: string;
+  fighter2: string;
+  thumbnail: string | null;
+  videoUrl: string;
+  embedSources: VideoEmbed[];
+  eventDate: string | null;
+  sourceUrl: string;
+}
+
+const PLATFORM_PATTERNS: { name: string; pattern: RegExp }[] = [
+  { name: 'dailymotion', pattern: /geo\.dailymotion\.com\/player\.html\?video=([a-zA-Z0-9]+)/ },
+  { name: 'okru', pattern: /ok\.ru\/videoembed\/(\d+)/ },
+  { name: 'vidara', pattern: /vidara\.so\/v\/([a-zA-Z0-9]+)/ },
+  { name: 'filemoon', pattern: /bysesukior\.com\/d\/([a-zA-Z0-9]+)/ },
+];
+
+function identifyPlatform(url: string): string {
+  for (const p of PLATFORM_PATTERNS) {
+    if (p.pattern.test(url)) return p.name;
+  }
+  return 'other';
+}
+
+function extractVideoEmbeds(html: string): VideoEmbed[] {
+  const embeds: VideoEmbed[] = [];
+  const links = extractAllBetween(html, '<a ', '</a>');
+  for (const link of links) {
+    const hrefMatch = link.match(/href="([^"]*)"/);
+    if (!hrefMatch) continue;
+    const href = hrefMatch[1];
+    const platform = identifyPlatform(href);
+    if (platform === 'other') continue;
+    const spanMatch = link.match(/<span>([^<]*)<\/span>/);
+    const label = spanMatch ? spanMatch[1].trim() : 'Watch';
+    embeds.push({ platform, url: href, label });
+  }
+  const iframes = extractAllBetween(html, '<iframe ', '</iframe>');
+  for (const iframe of iframes) {
+    const srcMatch = iframe.match(/src="([^"]*)"/);
+    if (!srcMatch) continue;
+    let src = srcMatch[1];
+    if (src.startsWith('//')) src = 'https:' + src;
+    const platform = identifyPlatform(src);
+    if (platform === 'other') continue;
+    embeds.push({ platform, url: src, label: 'Embed' });
+  }
+  return embeds;
+}
+
+function extractListEntries(html: string): ScrapedEntry[] {
+  const entries: ScrapedEntry[] = [];
+  const segments = html.split(/<div[^>]*id="entryID(\d+)"[^>]*>/);
+
+  for (let i = 1; i < segments.length; i += 2) {
+    const content = segments[i + 1] || '';
+
+    const titleMatch = content.match(/<h3>.*?<a[^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>/);
+    if (!titleMatch) continue;
+    const url = titleMatch[1];
+    const title = titleMatch[2].trim();
+
+    const thumbMatch = content.match(/<div class="poster"[^>]*>.*?<a[^>]*>.*?<img[^>]*src="([^"]*)"/);
+    const thumbnail = thumbMatch ? thumbMatch[1] : null;
+
+    const catMatch = content.match(/short_cat[^>]*>.*?<a[^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>/);
+    const category = catMatch ? catMatch[2].trim() : '';
+
+    const viewsMatch = content.match(/short_icn[^>]*>.*?<span[^>]*>(\d+)<\/span>/);
+    const views = viewsMatch ? parseInt(viewsMatch[1]) : 0;
+
+    const fullUrl = url.startsWith('http') ? url : `${BASE}${url}`;
+    entries.push({ title, url: fullUrl, thumbnail, category, views });
+  }
+
+  return entries;
+}
+
+function extractPageTitle(html: string): string {
+  const m = html.match(/<h1 class="h_title">([^<]*)<\/h1>/);
+  return m ? m[1].trim() : '';
+}
+
+function extractCategory(html: string): string {
+  const m = html.match(/entAllCats[^>]*>([^<]*)<\/a>/);
+  return m ? m[1].trim() : '';
+}
+
+function extractDescription(html: string): string {
+  const m = html.match(/<meta name="description" content="([^"]*)"/);
+  return m ? m[1].trim() : '';
+}
+
+function extractMainImage(html: string): string | null {
+  const m = html.match(/<div class="full_img"[^>]*>.*?<img[^>]*src="([^"]*)"/);
+  return m ? m[1] : null;
+}
+
+function normalizeThumbnail(src: string | null): string | null {
+  if (!src) return null;
+  if (src.startsWith('http')) return src;
+  if (src.startsWith('/')) return `${BASE}${src}`;
+  return `${BASE}/${src}`;
+}
+
+function parseFighters(title: string): { fighter1: string; fighter2: string } {
+  const vsPatterns = [
+    /(.+?)\s+vs\.?\s+(.+?)(?:\s+-\s+|$)/i,
+    /(.+?)\s+vs\.?\s+(.+)/i,
+  ];
+  for (const pattern of vsPatterns) {
+    const m = title.match(pattern);
+    if (m) {
+      const f1 = m[1].trim().replace(/^Full Fight Replay:?\s*/i, '').replace(/^Watch\s*/i, '');
+      const f2 = m[2].trim().replace(/-.*$/, '').trim();
+      if (f1 && f2 && f1.length > 1 && f2.length > 1) {
+        return { fighter1: f1, fighter2: f2 };
+      }
+    }
+  }
+  return { fighter1: '', fighter2: '' };
+}
+
+function determinePromotion(category: string, title: string): string {
+  const lower = (title + ' ' + category).toLowerCase();
+  if (lower.includes('ufc')) return 'UFC';
+  if (lower.includes('boxing')) return 'Boxing';
+  if (lower.includes('one championship') || lower.includes('one fc')) return 'ONE Championship';
+  if (lower.includes('bellator')) return 'Bellator MMA';
+  if (lower.includes('pfl')) return 'PFL';
+  if (lower.includes('bkfc')) return 'BKFC';
+  if (lower.includes('cage warriors')) return 'Cage Warriors';
+  if (lower.includes('invicta')) return 'Invicta FC';
+  if (lower.includes('ksw')) return 'KSW';
+  if (lower.includes('k-1') || lower.includes('kickboxing') || lower.includes('glory')) return 'K-1 Muay Thai & Kickboxing';
+  return 'MMA';
+}
+
+function parseDate(title: string, description: string, html: string): string | null {
+  const text = title + ' ' + description;
+  const months = '(?:January|February|March|April|May|June|July|August|September|October|November|December)';
+  const patterns = [
+    new RegExp(`(${months})\\s+(\\d{1,2}),?\\s+(\\d{4})`),
+    new RegExp(`(\\d{4})-(\\d{2})-(\\d{2})`),
+    new RegExp(`(\\d{1,2})\\s+(${months})\\s+(\\d{4})`),
+  ];
+  for (const p of patterns) {
+    const m = text.match(p);
+    if (m) {
+      try {
+        const d = new Date(m[0]);
+        if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+      } catch {}
+    }
+  }
+  return null;
+}
+
+function extractEntryDate(html: string): string | null {
+  const m = html.match(/entry-date[^>]*>([^<]*)</);
+  if (m) {
+    try {
+      const d = new Date(m[1].trim());
+      if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+    } catch {}
+  }
+  return null;
 }
 
 function slugify(text: string): string {
-  return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|^-/g, '').replace(/-$/g, '');
 }
 
-async function fetchPage(url: string): Promise<string> {
-  const res = await fetch(url, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-  return await res.text();
-}
-
-function extractNextData(html: string): any {
-  const m = html.match(/__NEXT_DATA__.*?application\/json">(.*?)<\/script>/);
-  if (!m) throw new Error('__NEXT_DATA__ not found');
-  return JSON.parse(m[1]);
-}
-
-async function fetchAllAvailableEvents(): Promise<MEvent[]> {
-  const html = await fetchPage(BASE);
-  const data = extractNextData(html);
-  const all: any[] = data?.props?.pageProps?.latestEvents || [];
-  const avail = all.filter((e: any) => e.is_video_available);
-  console.log('[SCRAPER] Homepage:', all.length, 'total,', avail.length, 'with video');
-  return avail.map((e: any) => ({
-    id: e.id, name: e.name, date: e.date, location: e.location || '',
-    cover_url: e.cover_url ? `${API_BASE}${e.cover_url}` : '',
-  }));
-}
-
-function buildEventSlug(event: MEvent): string {
-  return `${event.date}-${slugify(event.name)}-${event.id}`;
-}
-
-function formatDate(d: any): string {
-  if (typeof d === 'string') return d.substring(0, 10);
-  try { return new Date(d).toISOString().substring(0, 10); } catch { return ''; }
-}
-
-export async function scrapeAll(maxEvents = 30): Promise<{
-  events: number; fights: number; newFights: number; errors: string[];
+export async function scrapeAll(maxPages = 5): Promise<{
+  pagesScanned: number;
+  entriesFound: number;
+  newFights: number;
+  errors: string[];
 }> {
   const errors: string[] = [];
-  let totalFights = 0;
   let newFights = 0;
-  let eventsScanned = 0;
-  let eventsWithClips = 0;
+  let entriesFound = 0;
+  let pagesScanned = 0;
 
   try {
     const start = Date.now();
+    console.log('[FFR-SCRAPER] Starting scrape of fullfightreplays.com');
 
-    // 1) Get all available events from homepage
-    const allEvents = await fetchAllAvailableEvents();
-
-    // 2) Dedup against existing events in DB
-    const existingRows: any[] = await query`SELECT DISTINCT event_name, event_date FROM ufc_replays`;
-    const existingEvents = new Set(
-      existingRows.map((r: any) => `${r.event_name}|${formatDate(r.event_date)}`)
-    );
-    const newEvents = allEvents.filter(e => !existingEvents.has(`${e.name}|${e.date.substring(0, 10)}`));
-    console.log('[SCRAPER] New events:', newEvents.length, '(skipped', allEvents.length - newEvents.length, ')');
-
-    if (newEvents.length === 0) {
-      return { events: 0, fights: 0, newFights: 0, errors };
-    }
-
-    // 3) Batch-fetch event pages (10 at a time) until we find enough clips
-    const toScan = newEvents.slice(0, maxEvents);
-    eventsScanned = 0;
-    eventsWithClips = 0;
-    const fightSources: { event: MEvent; fights: FightData[] }[] = [];
-
-    while (eventsScanned < toScan.length) {
-      const batch = toScan.slice(eventsScanned, eventsScanned + 10);
-      eventsScanned += batch.length;
-
-      const pageResults = await Promise.all(batch.map(async (event) => {
-        try {
-          const slug = buildEventSlug(event);
-          const html = await fetchPage(`${BASE}/events/${slug}`);
-          const data = extractNextData(html);
-          const fights: FightData[] = data?.props?.pageProps?.fights || [];
-          return { event, fights, error: null as string | null };
-        } catch (err: any) {
-          return { event, fights: [] as FightData[], error: err.message };
-        }
-      }));
-
-      for (const pr of pageResults) {
-        if (pr.error) { errors.push(`${pr.event.name}: ${pr.error}`); continue; }
-        totalFights += pr.fights.length;
-        const valid = pr.fights.filter(f => f.clip && f.is_clip_available && f.participants?.length >= 2);
-        if (valid.length > 0) {
-          eventsWithClips++;
-          fightSources.push({ event: pr.event, fights: valid });
-          console.log('[SCRAPER]  ', pr.event.name, '-', valid.length, 'clips');
-        } else {
-          console.log('[SCRAPER]  ', pr.event.name, '- 0 clips');
-        }
+    const entries: ScrapedEntry[] = [];
+    for (let page = 1; page <= maxPages; page++) {
+      try {
+        const url = page === 1 ? BASE : `${BASE}/?page${page}`;
+        console.log(`[FFR-SCRAPER] Fetching page ${page}: ${url}`);
+        const html = await fetchPage(url);
+        const pageEntries = extractListEntries(html);
+        console.log(`[FFR-SCRAPER]   Found ${pageEntries.length} entries on page ${page}`);
+        entries.push(...pageEntries);
+        pagesScanned++;
+      } catch (err: any) {
+        errors.push(`Page ${page}: ${err.message}`);
       }
     }
 
-    console.log('[SCRAPER] Scanned', eventsScanned, 'events,', eventsWithClips, 'with clips in', Date.now() - start, 'ms');
+    entriesFound = entries.length;
+    console.log(`[FFR-SCRAPER] Total entries collected: ${entries.length}`);
 
-    // 4) Process fights from events that have clips (sequential per event, skip slug dupes)
-    for (const { event, fights } of fightSources) {
-      for (const fight of fights) {
-        try {
-          const p1 = fight.participants[0];
-          const p2 = fight.participants[1];
-          const title = `${p1.display_name} vs ${p2.display_name}`;
-          const fightSlug = `${event.date}-${slugify(p1.display_name)}-vs-${slugify(p2.display_name)}-${fight.id}`;
+    const existingSlugs = new Set<string>();
+    try {
+      const existing = await query`SELECT slug FROM ufc_replays WHERE source = 'fullfightreplays'`;
+      existing.forEach((r: any) => existingSlugs.add(r.slug));
+    } catch {}
 
-          const existing = await query`SELECT id FROM ufc_replays WHERE slug = ${fightSlug}`;
-          if (existing.length > 0) continue;
+    for (const entry of entries) {
+      try {
+        const entrySlug = slugify(entry.title);
+        if (existingSlugs.has(entrySlug)) continue;
 
-          const clipUrl = `${API_BASE}${fight.clip!.playlist_url}`;
+        const html = await fetchPage(entry.url);
+        const pageTitle = extractPageTitle(html) || entry.title;
+        const category = extractCategory(html) || entry.category;
+        const description = extractDescription(html);
+        const mainImage = extractMainImage(html) || entry.thumbnail;
+        const embeds = extractVideoEmbeds(html);
+        const eventDate = parseDate(pageTitle, description, html) || extractEntryDate(html);
 
-          const verify = await fetch(clipUrl, {
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-              'Referer': 'https://mmareplayfull.com/',
-            },
-          });
-          if (!verify.ok) { errors.push(`${title}: clip ${verify.status}`); continue; }
-
-          const promotion = event.name.includes('UFC') ? 'UFC' :
-            event.name.includes('PFL') ? 'PFL' :
-            event.name.includes('ONE') ? 'ONE Championship' :
-            event.name.includes('Bellator') ? 'Bellator' : 'UFC';
-
-          const result = fight.method && fight.round ? `${fight.method} Round ${fight.round}` : null;
-          const desc = `${p1.display_name} vs ${p2.display_name} at ${event.name}. ${fight.weight_class || ''} bout.`;
-          const img1 = p1.fighter?.vertical_image_url || p1.fighter?.thumbnail_url || '';
-          const img2 = p2.fighter?.vertical_image_url || p2.fighter?.thumbnail_url || '';
-          const videoUrl = `/api/video-proxy?url=${encodeURIComponent(clipUrl)}`;
-
-          await rawQueryOrThrow(
-            `INSERT INTO ufc_replays (title,slug,promotion,event_name,fighter1,fighter2,fighter1_img,fighter2_img,weight_class,result,duration,description,thumbnail,video_url,event_date,featured,published,views,created_at,updated_at)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,0,1,0,NOW(),NOW())`,
-            [title, fightSlug, promotion, event.name, p1.display_name, p2.display_name,
-             img1 ? `${API_BASE}${img1}` : '', img2 ? `${API_BASE}${img2}` : '',
-             fight.weight_class || null, result, fight.fight_time || null, desc,
-             event.cover_url || null, videoUrl, event.date || null]
-          );
-          newFights++;
-        } catch (err: any) {
-          errors.push(`Fight ${fight.id}: ${err.message}`);
+        if (embeds.length === 0) {
+          errors.push(`${pageTitle}: no video embeds found`);
+          continue;
         }
+
+        const fighters = parseFighters(pageTitle);
+        const promotion = determinePromotion(category, pageTitle);
+        const primaryVideo = embeds[0].url.startsWith('http') ? embeds[0].url : `https:${embeds[0].url}`;
+        const thumbnail = normalizeThumbnail(mainImage);
+        const embedSources = JSON.stringify(embeds);
+
+        await rawQueryOrThrow(
+          `INSERT INTO ufc_replays 
+           (title, slug, promotion, event_name, fighter1, fighter2, thumbnail, video_url, event_date, description, source, embed_sources, published, views, created_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,1,0,NOW(),NOW())`,
+          [
+            pageTitle, entrySlug, promotion, pageTitle,
+            fighters.fighter1 || pageTitle, fighters.fighter2 || '',
+            thumbnail, primaryVideo, eventDate,
+            description || category, 'fullfightreplays', embedSources,
+          ]
+        );
+        newFights++;
+        console.log(`[FFR-SCRAPER]  + ${pageTitle} (${promotion}, ${embeds.length} embeds)`);
+      } catch (err: any) {
+        errors.push(`${entry.title}: ${err.message}`);
       }
     }
 
     const elapsed = Date.now() - start;
-    console.log('[SCRAPER] Done:', eventsScanned, 'scanned,', eventsWithClips, 'with clips,', newFights, 'new,', elapsed, 'ms');
+    console.log(`[FFR-SCRAPER] Done: ${pagesScanned} pages, ${entriesFound} entries, ${newFights} new, ${errors.length} errors, ${elapsed}ms`);
   } catch (err: any) {
-    errors.push(`Scrape failed: ${err.message}`);
-    console.error('[SCRAPER] Fatal:', err.message);
+    errors.push(`Fatal: ${err.message}`);
+    console.error('[FFR-SCRAPER] Fatal:', err.message);
   }
 
-  return { events: eventsScanned, fights: totalFights, newFights, errors };
+  return { pagesScanned, entriesFound, newFights, errors };
 }

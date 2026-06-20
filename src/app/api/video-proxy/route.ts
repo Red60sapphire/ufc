@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const ALLOWED_HOSTS = ['api.mmareplayfull.com', 'portal.portalmma.cc', 'mmareplayfull.com'];
 const MAX_RETRIES = 2;
 const FETCH_TIMEOUT = 15000;
 
@@ -13,7 +12,7 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_R
       clearTimeout(timeout);
       return response;
     } catch (err: any) {
-      console.error(`[video-proxy] Attempt ${attempt + 1}/${retries + 1} failed for ${url}:`, err?.message || err);
+      console.error(`[video-proxy] Attempt ${attempt + 1}/${retries + 1} failed:`, err?.message || err);
       if (attempt === retries) throw err;
       await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
     }
@@ -23,11 +22,7 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_R
 
 export async function OPTIONS() {
   return new NextResponse(null, {
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
-      'Access-Control-Allow-Headers': '*',
-    },
+    headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS', 'Access-Control-Allow-Headers': '*' },
   });
 }
 
@@ -44,18 +39,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
   }
 
-  if (!ALLOWED_HOSTS.includes(targetUrl.hostname)) {
-    console.warn(`[video-proxy] Blocked host: ${targetUrl.hostname}`);
-    return NextResponse.json({ error: 'Host not allowed' }, { status: 403 });
-  }
-
   try {
     console.log(`[video-proxy] Fetching: ${targetUrl.toString()}`);
     const response = await fetchWithRetry(targetUrl.toString(), {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'application/vnd.apple.mpegurl,application/x-mpegURL,video/mp2t,video/mp4,*/*',
-        'Referer': 'https://mmareplayfull.com/',
       },
     });
 
@@ -77,10 +66,7 @@ export async function GET(request: NextRequest) {
       'Access-Control-Allow-Headers': '*',
       'Cache-Control': 'public, max-age=60',
     };
-
-    if (contentType) {
-      resHeaders['Content-Type'] = contentType;
-    }
+    if (contentType) resHeaders['Content-Type'] = contentType;
 
     if (isPlaylist) {
       let body = await response.text();
@@ -89,9 +75,7 @@ export async function GET(request: NextRequest) {
         if (trimmed.startsWith('#') || trimmed === '') return line;
         try {
           const resolved = new URL(trimmed, targetUrl).toString();
-          if (ALLOWED_HOSTS.includes(new URL(resolved).hostname)) {
-            return `/api/video-proxy?url=${encodeURIComponent(resolved)}`;
-          }
+          return `/api/video-proxy?url=${encodeURIComponent(resolved)}`;
         } catch {}
         return line;
       }).join('\n');
@@ -102,9 +86,7 @@ export async function GET(request: NextRequest) {
       return new NextResponse(null, { headers: resHeaders });
     }
 
-    return new NextResponse(response.body, {
-      headers: resHeaders,
-    });
+    return new NextResponse(response.body, { headers: resHeaders });
   } catch (err: any) {
     console.error(`[video-proxy] Fatal error for ${targetUrl?.toString() || urlParam}:`, err?.message || err);
     return NextResponse.json({ error: `Proxy failed: ${err?.message || 'Unknown'}` }, { status: 502 });
