@@ -6,6 +6,7 @@ import { useToast } from '@/lib/toast';
 interface Stream {
   id: number;
   title: string;
+  video_url: string;
 }
 
 interface Message {
@@ -15,6 +16,22 @@ interface Message {
   is_admin: number;
   created_at: string;
   guest_name?: string;
+}
+
+function getYouTubeVideoId(url: string): string | null {
+  if (url.includes('youtube.com/watch')) {
+    const v = url.split('v=')[1]?.split('&')[0];
+    return v || null;
+  }
+  if (url.includes('youtu.be/')) {
+    const v = url.split('youtu.be/')[1]?.split('?')[0];
+    return v || null;
+  }
+  if (url.includes('youtube.com/embed/')) {
+    const v = url.split('embed/')[1]?.split('?')[0];
+    return v || null;
+  }
+  return null;
 }
 
 function getGuestName(): string {
@@ -40,6 +57,17 @@ export default function ChatBox({ streams }: { streams: Stream[] }) {
   const pollRef = useRef<ReturnType<typeof setInterval>>(undefined);
   const inputRef = useRef<HTMLInputElement>(null);
   const { addToast } = useToast();
+  const [domain, setDomain] = useState('localhost');
+
+  const activeStream = streams.find((s) => s.id === activeStreamId) || streams[0];
+  const youtubeId = activeStream ? getYouTubeVideoId(activeStream.video_url) : null;
+  const isYouTubeStream = !!youtubeId;
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setDomain(window.location.hostname);
+    }
+  }, []);
 
   useEffect(() => {
     setGuestName(getGuestName());
@@ -50,7 +78,7 @@ export default function ChatBox({ streams }: { streams: Stream[] }) {
   }, []);
 
   useEffect(() => {
-    if (!activeStreamId) return;
+    if (!activeStreamId || isYouTubeStream) return;
     const fetchMessages = () => {
       fetch(`/api/chat/messages?stream_id=${activeStreamId}`)
         .then((r) => r.json())
@@ -60,7 +88,7 @@ export default function ChatBox({ streams }: { streams: Stream[] }) {
     fetchMessages();
     pollRef.current = setInterval(fetchMessages, 3000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [activeStreamId]);
+  }, [activeStreamId, isYouTubeStream]);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -140,6 +168,9 @@ export default function ChatBox({ streams }: { streams: Stream[] }) {
       <div className="flex items-center gap-3 mb-5">
         <div className="h-4 w-1 bg-ufc-red rounded-full" />
         <h2 className="text-white text-sm uppercase tracking-wider font-bold">Live Chat</h2>
+        {isYouTubeStream && (
+          <span className="text-[9px] bg-yellow-500/10 text-yellow-400 px-2 py-0.5 rounded-full uppercase font-semibold">YouTube</span>
+        )}
       </div>
 
       <div className="bg-gradient-to-b from-[#1a1a1a] to-[#111] border border-gray-800 rounded-2xl overflow-hidden card-hover">
@@ -159,89 +190,101 @@ export default function ChatBox({ streams }: { streams: Stream[] }) {
           </div>
         )}
 
-        <div className="px-4 py-3 border-b border-gray-800/50 flex items-center justify-between">
-          <h3 className="text-xs text-gray-300 font-semibold">Messages</h3>
-          {user?.is_admin ? (
-            <div className="flex gap-2">
-              <button onClick={clearStream} className="text-gray-500 hover:text-white text-[10px] uppercase transition">Clear</button>
-              <button onClick={clearAll} className="text-gray-500 hover:text-red-400 text-[10px] uppercase transition">Clear All</button>
-            </div>
-          ) : null}
-        </div>
-
-        <div ref={scrollContainerRef} className="h-64 overflow-y-scroll p-4 space-y-2 bg-[#0a0a0a]">
-          {messages.map((msg) => {
-            const isGuest = !msg.is_admin && msg.username?.startsWith('Fighter-');
-            return (
-              <div key={msg.id} className="flex items-start gap-2 group py-1.5 px-2 rounded-lg hover:bg-white/[0.03] transition-colors">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${isGuest ? 'bg-gray-700/50' : 'bg-ufc-red/20'}`}>
-                  <span className={`text-[8px] font-bold ${isGuest ? 'text-gray-400' : 'text-ufc-red'}`}>{msg.username?.charAt(0).toUpperCase()}</span>
+        {isYouTubeStream && youtubeId ? (
+          <div className="h-[400px]">
+            <iframe
+              src={`https://www.youtube.com/live_chat?v=${youtubeId}&embed_domain=${domain}`}
+              className="w-full h-full"
+              allowFullScreen
+            />
+          </div>
+        ) : (
+          <>
+            <div className="px-4 py-3 border-b border-gray-800/50 flex items-center justify-between">
+              <h3 className="text-xs text-gray-300 font-semibold">Messages</h3>
+              {user?.is_admin ? (
+                <div className="flex gap-2">
+                  <button onClick={clearStream} className="text-gray-500 hover:text-white text-[10px] uppercase transition">Clear</button>
+                  <button onClick={clearAll} className="text-gray-500 hover:text-red-400 text-[10px] uppercase transition">Clear All</button>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className={`text-[10px] font-semibold ${isGuest ? 'text-gray-400' : 'text-ufc-red'}`}>{msg.username}</span>
-                    {msg.is_admin ? (
-                      <span className="text-[8px] bg-ufc-red/20 text-ufc-red px-1 rounded font-semibold">MOD</span>
-                    ) : isGuest ? (
-                      <span className="text-[8px] bg-gray-700/30 text-gray-500 px-1 rounded">GUEST</span>
+              ) : null}
+            </div>
+
+            <div ref={scrollContainerRef} className="h-64 overflow-y-scroll p-4 space-y-2 bg-[#0a0a0a]">
+              {messages.map((msg) => {
+                const isGuest = !msg.is_admin && msg.username?.startsWith('Fighter-');
+                return (
+                  <div key={msg.id} className="flex items-start gap-2 group py-1.5 px-2 rounded-lg hover:bg-white/[0.03] transition-colors">
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${isGuest ? 'bg-gray-700/50' : 'bg-ufc-red/20'}`}>
+                      <span className={`text-[8px] font-bold ${isGuest ? 'text-gray-400' : 'text-ufc-red'}`}>{msg.username?.charAt(0).toUpperCase()}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className={`text-[10px] font-semibold ${isGuest ? 'text-gray-400' : 'text-ufc-red'}`}>{msg.username}</span>
+                        {msg.is_admin ? (
+                          <span className="text-[8px] bg-ufc-red/20 text-ufc-red px-1 rounded font-semibold">MOD</span>
+                        ) : isGuest ? (
+                          <span className="text-[8px] bg-gray-700/30 text-gray-500 px-1 rounded">GUEST</span>
+                        ) : null}
+                        <span className="text-gray-600 text-[9px] ml-auto">
+                          {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <p className="text-gray-300 text-xs mt-0.5 break-words">{msg.message}</p>
+                    </div>
+                    {user?.is_admin ? (
+                      <button onClick={() => deleteMessage(msg.id)} className="text-gray-600 hover:text-red-400 text-xs opacity-0 group-hover:opacity-100 transition flex-shrink-0 p-1">✕</button>
                     ) : null}
-                    <span className="text-gray-600 text-[9px] ml-auto">
-                      {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
                   </div>
-                  <p className="text-gray-300 text-xs mt-0.5 break-words">{msg.message}</p>
-                </div>
-                {user?.is_admin ? (
-                  <button onClick={() => deleteMessage(msg.id)} className="text-gray-600 hover:text-red-400 text-xs opacity-0 group-hover:opacity-100 transition flex-shrink-0 p-1">✕</button>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="border-t border-gray-800/50 p-4">
-          {user ? (
-            <form onSubmit={sendMessage} className="flex gap-2">
-              <input
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Type a message..."
-                maxLength={500}
-                className="flex-1 bg-white/5 border border-gray-700/50 rounded-full px-4 py-2.5 text-white text-xs placeholder-gray-500 focus:outline-none focus:border-ufc-red/50 focus:bg-white/[0.07] transition-all"
-              />
-              <button type="submit" disabled={!input.trim()} className="bg-ufc-red text-white px-5 py-2.5 text-xs uppercase font-semibold rounded-full hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-lg shadow-red-900/20">
-                Send
-              </button>
-            </form>
-          ) : (
-            <div className="flex gap-2">
-              <input
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && sendMessage(e)}
-                placeholder={`Chat as ${guestName}...`}
-                maxLength={500}
-                className="flex-1 bg-white/5 border border-gray-700/50 rounded-full px-4 py-2.5 text-white text-xs placeholder-gray-500 focus:outline-none focus:border-ufc-red/50 focus:bg-white/[0.07] transition-all"
-              />
-              <button onClick={sendMessage} disabled={!input.trim()} className="bg-ufc-red text-white px-5 py-2.5 text-xs uppercase font-semibold rounded-full hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-lg shadow-red-900/20">
-                Send
-              </button>
-              <button onClick={changeGuestName} className="text-gray-500 hover:text-white text-xs px-2 transition" title="Change name">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-              </button>
+                );
+              })}
             </div>
-          )}
-          {error && <p className="text-red-400 text-xs mt-2">{error}</p>}
-          {!user && (
-            <p className="text-gray-600 text-[9px] mt-2">
-              Guest name: <span className="text-gray-400 font-semibold">{guestName}</span>
-              {' — '}
-              <button onClick={changeGuestName} className="text-ufc-red hover:text-red-400">change</button>
-            </p>
-          )}
-        </div>
+
+            <div className="border-t border-gray-800/50 p-4">
+              {user ? (
+                <form onSubmit={sendMessage} className="flex gap-2">
+                  <input
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder="Type a message..."
+                    maxLength={500}
+                    className="flex-1 bg-white/5 border border-gray-700/50 rounded-full px-4 py-2.5 text-white text-xs placeholder-gray-500 focus:outline-none focus:border-ufc-red/50 focus:bg-white/[0.07] transition-all"
+                  />
+                  <button type="submit" disabled={!input.trim()} className="bg-ufc-red text-white px-5 py-2.5 text-xs uppercase font-semibold rounded-full hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-lg shadow-red-900/20">
+                    Send
+                  </button>
+                </form>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && sendMessage(e)}
+                    placeholder={`Chat as ${guestName}...`}
+                    maxLength={500}
+                    className="flex-1 bg-white/5 border border-gray-700/50 rounded-full px-4 py-2.5 text-white text-xs placeholder-gray-500 focus:outline-none focus:border-ufc-red/50 focus:bg-white/[0.07] transition-all"
+                  />
+                  <button onClick={sendMessage} disabled={!input.trim()} className="bg-ufc-red text-white px-5 py-2.5 text-xs uppercase font-semibold rounded-full hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-lg shadow-red-900/20">
+                    Send
+                  </button>
+                  <button onClick={changeGuestName} className="text-gray-500 hover:text-white text-xs px-2 transition" title="Change name">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                  </button>
+                </div>
+              )}
+              {error && <p className="text-red-400 text-xs mt-2">{error}</p>}
+              {!user && (
+                <p className="text-gray-600 text-[9px] mt-2">
+                  Guest name: <span className="text-gray-400 font-semibold">{guestName}</span>
+                  {' — '}
+                  <button onClick={changeGuestName} className="text-ufc-red hover:text-red-400">change</button>
+                </p>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

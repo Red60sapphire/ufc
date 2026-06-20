@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { getDb } from '@/lib/db';
 import { cookies } from 'next/headers';
 
 function getUser(cookieStore: Awaited<ReturnType<typeof cookies>>) {
@@ -13,10 +13,15 @@ function getUser(cookieStore: Awaited<ReturnType<typeof cookies>>) {
 }
 
 export async function GET() {
-  const streams = await query`
-    SELECT s.*, u.username FROM streams s JOIN users u ON s.created_by = u.id ORDER BY s.is_live DESC, s.created_at DESC
-  `;
-  return NextResponse.json({ streams });
+  try {
+    const db = getDb();
+    const streams = await db`
+      SELECT s.*, u.username FROM streams s JOIN users u ON s.created_by = u.id ORDER BY s.is_live DESC, s.created_at DESC
+    `;
+    return NextResponse.json({ streams });
+  } catch {
+    return NextResponse.json({ streams: [] });
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -28,13 +33,15 @@ export async function POST(request: NextRequest) {
 
   try {
     const { title, description, video_url, thumbnail_url, is_live } = await request.json();
-    await query`
+    const db = getDb();
+    await db`
       INSERT INTO streams (title, description, video_url, thumbnail_url, is_live, created_by)
       VALUES (${title}, ${description || null}, ${video_url}, ${thumbnail_url || null}, ${is_live || 0}, ${user.id})
     `;
     return NextResponse.json({ success: true });
   } catch (err) {
-    return NextResponse.json({ success: false, error: 'Failed to create stream' }, { status: 500 });
+    const message = err instanceof Error ? err.message : 'Failed to create stream';
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
 
@@ -47,10 +54,12 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const { id, is_live } = await request.json();
-    await query`UPDATE streams SET is_live = ${is_live} WHERE id = ${id}`;
+    const db = getDb();
+    await db`UPDATE streams SET is_live = ${is_live} WHERE id = ${id}`;
     return NextResponse.json({ success: true });
   } catch (err) {
-    return NextResponse.json({ success: false, error: 'Failed to update stream' }, { status: 500 });
+    const message = err instanceof Error ? err.message : 'Failed to update stream';
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
 
@@ -63,9 +72,11 @@ export async function DELETE(request: NextRequest) {
 
   try {
     const { id } = await request.json();
-    await query`DELETE FROM streams WHERE id = ${id}`;
+    const db = getDb();
+    await db`DELETE FROM streams WHERE id = ${id}`;
     return NextResponse.json({ success: true });
   } catch (err) {
-    return NextResponse.json({ success: false, error: 'Failed to delete stream' }, { status: 500 });
+    const message = err instanceof Error ? err.message : 'Failed to delete stream';
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
