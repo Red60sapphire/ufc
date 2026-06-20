@@ -224,16 +224,13 @@ function StreamsTab({ streams, onRefresh }: { streams: Stream[]; onRefresh: () =
 
   const handleAdd = async (e: FormEvent) => {
     e.preventDefault();
-    console.log('Adding stream:', { title, description, video_url: videoUrl, thumbnail_url: thumbnailUrl, is_live: isLive ? 1 : 0, source });
     setError('');
     const res = await fetch('/api/streams', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title, description, video_url: videoUrl, thumbnail_url: thumbnailUrl, is_live: isLive ? 1 : 0, source }),
     });
-    console.log('Response status:', res.status);
     const data = await res.json();
-    console.log('Response data:', data);
     if (data.success) {
       setTitle(''); setDescription(''); setVideoUrl(''); setThumbnailUrl(''); setSource(''); setIsLive(false);
       setShowAdd(false);

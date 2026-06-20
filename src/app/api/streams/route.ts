@@ -22,22 +22,18 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies();
   const user = getUser(cookieStore);
-  console.log('POST /api/streams - user:', user);
   if (!user?.is_admin) {
-    console.log('Unauthorized - no admin');
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 403 });
   }
 
   try {
     const { title, description, video_url, thumbnail_url, is_live, source } = await request.json();
-    console.log('POST data:', { title, description, video_url, thumbnail_url, is_live, source, userId: user.id });
     await query`
       INSERT INTO streams (title, description, video_url, thumbnail_url, is_live, source, created_by)
       VALUES (${title}, ${description || null}, ${video_url}, ${thumbnail_url || null}, ${is_live || 0}, ${source || null}, ${user.id})
     `;
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error('POST error:', err);
     return NextResponse.json({ success: false, error: 'Failed to create stream' }, { status: 500 });
   }
 }
