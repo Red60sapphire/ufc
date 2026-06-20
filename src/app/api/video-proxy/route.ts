@@ -1,6 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const ALLOWED_HOSTS = ['api.mmareplayfull.com', 'portal.portalmma.cc', 'mmareplayfull.com'];
+const MAX_RETRIES = 2;
+const FETCH_TIMEOUT = 15000;
+
+async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_RETRIES): Promise<Response> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+      const response = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(timeout);
+      return response;
+    } catch (err: any) {
+      console.error(`[video-proxy] Attempt ${attempt + 1}/${retries + 1} failed for ${url}:`, err?.message || err);
+      if (attempt === retries) throw err;
+      await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+    }
+  }
+  throw new Error('Unreachable');
+}
 
 export async function OPTIONS() {
   return new NextResponse(null, {
@@ -26,11 +45,13 @@ export async function GET(request: NextRequest) {
   }
 
   if (!ALLOWED_HOSTS.includes(targetUrl.hostname)) {
+    console.warn(`[video-proxy] Blocked host: ${targetUrl.hostname}`);
     return NextResponse.json({ error: 'Host not allowed' }, { status: 403 });
   }
 
   try {
-    const response = await fetch(targetUrl.toString(), {
+    console.log(`[video-proxy] Fetching: ${targetUrl.toString()}`);
+    const response = await fetchWithRetry(targetUrl.toString(), {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'application/vnd.apple.mpegurl,application/x-mpegURL,video/mp2t,video/mp4,*/*',
@@ -39,7 +60,9 @@ export async function GET(request: NextRequest) {
     });
 
     if (!response.ok) {
-      return new NextResponse(await response.text(), {
+      console.warn(`[video-proxy] Upstream ${response.status} for ${targetUrl.toString()}`);
+      const body = await response.text().catch(() => '');
+      return new NextResponse(body || response.statusText, {
         status: response.status,
         headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS', 'Access-Control-Allow-Headers': '*' },
       });
@@ -82,7 +105,8 @@ export async function GET(request: NextRequest) {
     return new NextResponse(response.body, {
       headers: resHeaders,
     });
-  } catch {
-    return NextResponse.json({ error: 'Proxy failed' }, { status: 502 });
+  } catch (err: any) {
+    console.error(`[video-proxy] Fatal error for ${targetUrl?.toString() || urlParam}:`, err?.message || err);
+    return NextResponse.json({ error: `Proxy failed: ${err?.message || 'Unknown'}` }, { status: 502 });
   }
 }

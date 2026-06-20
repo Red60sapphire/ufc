@@ -1,16 +1,19 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import VideoPlayer from '@/components/VideoPlayer';
 import ReplayRow from '@/components/ReplayRow';
 
 export default function ReplayDetailClient({ replay, related }: { replay: any; related: any[] }) {
+  const [img1Failed, setImg1Failed] = useState(false);
+  const [img2Failed, setImg2Failed] = useState(false);
+
   useEffect(() => {
-    fetch('/api/replays', {
-      method: 'PATCH',
+    fetch('/api/replays/view', {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: replay.id, views: (replay.views || 0) + 1 }),
+      body: JSON.stringify({ id: replay.id }),
     }).catch(() => {});
   }, [replay.id]);
 
@@ -49,8 +52,8 @@ export default function ReplayDetailClient({ replay, related }: { replay: any; r
               <div className="flex items-center gap-4 md:gap-6 p-4 bg-white/[0.03] border border-gray-800/50 rounded-xl">
                 <div className="text-center flex-1">
                   <div className="relative w-14 h-14 md:w-16 md:h-16 rounded-full bg-gray-800 mx-auto overflow-hidden border-2 border-gray-700 shadow-lg">
-                    {replay.fighter1_img ? (
-                      <img src={replay.fighter1_img} alt={replay.fighter1} className="w-full h-full object-cover" />
+                    {replay.fighter1_img && !img1Failed ? (
+                      <img src={replay.fighter1_img} alt={replay.fighter1} className="w-full h-full object-cover" onError={() => setImg1Failed(true)} />
                     ) : (
                       <div className="w-full h-full bg-gradient-to-br from-ufc-red/20 to-gray-800 flex items-center justify-center text-white font-bold text-lg">
                         {replay.fighter1?.charAt(0)}
@@ -66,8 +69,8 @@ export default function ReplayDetailClient({ replay, related }: { replay: any; r
                 </div>
                 <div className="text-center flex-1">
                   <div className="relative w-14 h-14 md:w-16 md:h-16 rounded-full bg-gray-800 mx-auto overflow-hidden border-2 border-gray-700 shadow-lg">
-                    {replay.fighter2_img ? (
-                      <img src={replay.fighter2_img} alt={replay.fighter2} className="w-full h-full object-cover" />
+                    {replay.fighter2_img && !img2Failed ? (
+                      <img src={replay.fighter2_img} alt={replay.fighter2} className="w-full h-full object-cover" onError={() => setImg2Failed(true)} />
                     ) : (
                       <div className="w-full h-full bg-gradient-to-br from-ufc-red/20 to-gray-800 flex items-center justify-center text-white font-bold text-lg">
                         {replay.fighter2?.charAt(0)}

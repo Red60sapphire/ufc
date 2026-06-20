@@ -4,36 +4,20 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 
 interface FighterData {
-  id?: string;
-  name?: string;
-  record?: string;
-  height?: string;
-  weight?: string;
-  reach?: string;
-  stance?: string;
-  age?: number;
-  country?: string;
-  flag?: string;
-  image?: string;
-  weightClass?: string;
-  nickname?: string;
+  id?: string; name?: string; record?: string; height?: string;
+  weight?: string; reach?: string; stance?: string; age?: number;
+  country?: string; flag?: string; image?: string;
+  weightClass?: string; nickname?: string;
 }
 
 interface HeroProps {
   mainEvent: {
-    fighter1: string;
-    fighter2: string;
-    fighter1Img: string;
-    fighter2Img: string;
-    fighter1Record: string;
-    fighter2Record: string;
-    weightClass: string;
-    date: string;
-    venue: string;
-    eventId: string;
-    eventName?: string;
-    f1Id?: string;
-    f2Id?: string;
+    fighter1: string; fighter2: string;
+    fighter1Img: string; fighter2Img: string;
+    fighter1Record: string; fighter2Record: string;
+    weightClass: string; date: string; venue: string;
+    eventId: string; eventName?: string;
+    f1Id?: string; f2Id?: string;
   };
   fighter1Data?: FighterData | null;
   fighter2Data?: FighterData | null;
@@ -49,22 +33,17 @@ export default function HeroSection({ mainEvent, fighter1Data, fighter2Data, has
   const [status, setStatus] = useState<EventStatus>('loading');
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
   const [mounted, setMounted] = useState(false);
+  const [f1Rank] = useState(() => Math.floor(Math.random() * 5) + 1);
+  const [f2Rank] = useState(() => Math.floor(Math.random() * 5) + 2);
+  const [viewerCount] = useState(() => Math.floor(Math.random() * 5000 + 1000));
 
   useEffect(() => {
     setMounted(true);
     const target = new Date(mainEvent.date).getTime();
     const now = Date.now();
-
     const isLive = hasStreams && Math.abs(target - now) < 86400000 * 2;
     const isPast = target < now;
-
-    if (isLive) {
-      setStatus('live');
-    } else if (isPast) {
-      setStatus('finished');
-    } else {
-      setStatus('upcoming');
-    }
+    setStatus(isLive ? 'live' : isPast ? 'finished' : 'upcoming');
 
     const tick = () => {
       const diff = Math.max(0, target - Date.now());
@@ -129,7 +108,6 @@ export default function HeroSection({ mainEvent, fighter1Data, fighter2Data, has
   return (
     <div className="relative overflow-hidden rounded-3xl border border-gray-800/40 shadow-2xl shadow-black/60">
       <div className="absolute inset-0 bg-gradient-to-br from-[#0a0a0a] via-[#1a0505] to-[#0a0a0a]" />
-
       <div className="absolute inset-0 opacity-[0.06]"
         style={{
           backgroundImage: `radial-gradient(circle at 25% 25%, rgba(210,10,10,0.3) 0%, transparent 50%),
@@ -138,10 +116,8 @@ export default function HeroSection({ mainEvent, fighter1Data, fighter2Data, has
                             repeating-linear-gradient(90deg, transparent, transparent 40px, rgba(255,255,255,0.02) 40px, rgba(255,255,255,0.02) 41px)`
         }}
       />
-
       <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-ufc-red/60 to-transparent" />
       <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-ufc-red/20 to-transparent" />
-
       <div className="absolute -top-20 -left-20 w-40 h-40 bg-ufc-red/5 rounded-full blur-3xl" />
       <div className="absolute -bottom-20 -right-20 w-40 h-40 bg-ufc-gold/5 rounded-full blur-3xl" />
 
@@ -156,14 +132,10 @@ export default function HeroSection({ mainEvent, fighter1Data, fighter2Data, has
             )}
             <span className="text-gray-400 text-xs uppercase tracking-[0.2em]">{mainEvent.weightClass}</span>
           </div>
-
           <div className="flex items-center gap-3">
             {status === 'live' && (
               <span className="flex items-center gap-1.5 bg-ufc-red/10 text-ufc-red text-[10px] px-2.5 py-1 rounded-full border border-ufc-red/30 uppercase tracking-wider font-bold">
-                <span className="relative flex w-2 h-2">
-                  <span className="absolute inset-0 rounded-full bg-ufc-red animate-ping" />
-                  <span className="relative rounded-full bg-ufc-red w-2 h-2" />
-                </span>
+                <span className="relative flex w-2 h-2"><span className="absolute inset-0 rounded-full bg-ufc-red animate-ping" /><span className="relative rounded-full bg-ufc-red w-2 h-2" /></span>
                 LIVE
               </span>
             )}
@@ -205,7 +177,7 @@ export default function HeroSection({ mainEvent, fighter1Data, fighter2Data, has
               <StatBadge label="Stance" value={f1?.stance || '-'} />
               <StatBadge label="Streak" value={getWinStreak(f1?.record)} />
               <StatBadge label="Finish" value={getFinishPct(f1?.record)} />
-              <StatBadge label="Rank" value={mainEvent.weightClass ? '#' + (Math.floor(Math.random() * 5) + 1) : '-'} />
+              <StatBadge label="Rank" value={mainEvent.weightClass ? `#${f1Rank}` : '-'} />
             </div>
           </div>
 
@@ -244,7 +216,7 @@ export default function HeroSection({ mainEvent, fighter1Data, fighter2Data, has
               <StatBadge label="Stance" value={f2?.stance || '-'} />
               <StatBadge label="Streak" value={getWinStreak(f2?.record)} />
               <StatBadge label="Finish" value={getFinishPct(f2?.record)} />
-              <StatBadge label="Rank" value={mainEvent.weightClass ? '#' + (Math.floor(Math.random() * 5) + 2) : '-'} />
+              <StatBadge label="Rank" value={mainEvent.weightClass ? `#${f2Rank}` : '-'} />
             </div>
           </div>
         </div>
@@ -253,32 +225,18 @@ export default function HeroSection({ mainEvent, fighter1Data, fighter2Data, has
           <div className="mt-8 max-w-2xl mx-auto">
             <p className="text-gray-600 text-[10px] uppercase tracking-[0.2em] text-center mb-4 font-semibold">Tale of the Tape</p>
             {f1Reach > 0 && f2Reach > 0 && (
-              <ComparisonBar
-                label="Reach"
-                f1Value={f1?.reach || `${f1Reach}"`}
-                f2Value={f2?.reach || `${f2Reach}"`}
-                pct={Math.round((f1Reach / maxReach) * 100)}
-                pct2={Math.round((f2Reach / maxReach) * 100)}
-              />
+              <ComparisonBar label="Reach" f1Value={f1?.reach || `${f1Reach}"`} f2Value={f2?.reach || `${f2Reach}"`}
+                pct={Math.round((f1Reach / maxReach) * 100)} pct2={Math.round((f2Reach / maxReach) * 100)} />
             )}
             {f1Height > 0 && f2Height > 0 && (
-              <ComparisonBar
-                label="Height"
-                f1Value={f1?.height || `${Math.floor(f1Height / 12)}'${f1Height % 12}"`}
+              <ComparisonBar label="Height" f1Value={f1?.height || `${Math.floor(f1Height / 12)}'${f1Height % 12}"`}
                 f2Value={f2?.height || `${Math.floor(f2Height / 12)}'${f2Height % 12}"`}
-                pct={Math.round((f1Height / maxHeight) * 100)}
-                pct2={Math.round((f2Height / maxHeight) * 100)}
-              />
+                pct={Math.round((f1Height / maxHeight) * 100)} pct2={Math.round((f2Height / maxHeight) * 100)} />
             )}
             {f1Age > 0 && f2Age > 0 && (
-              <ComparisonBar
-                label="Age"
-                f1Value={`${f1Age}`}
-                f2Value={`${f2Age}`}
+              <ComparisonBar label="Age" f1Value={`${f1Age}`} f2Value={`${f2Age}`}
                 pct={Math.round((f1Age / Math.max(f1Age, f2Age)) * 100)}
-                pct2={Math.round((f2Age / Math.max(f1Age, f2Age)) * 100)}
-                invert
-              />
+                pct2={Math.round((f2Age / Math.max(f1Age, f2Age)) * 100)} invert />
             )}
           </div>
         )}
@@ -305,16 +263,13 @@ export default function HeroSection({ mainEvent, fighter1Data, fighter2Data, has
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <button className="group relative bg-ufc-red text-white px-10 py-4 text-sm uppercase tracking-[0.15em] font-bold rounded-full hover:bg-red-700 transition-all duration-300 shadow-lg shadow-red-900/50 hover:shadow-red-900/70 overflow-hidden btn-shine w-full sm:w-auto text-center">
                 <span className="relative z-10 flex items-center gap-2">
-                  <span className="relative flex w-2.5 h-2.5">
-                    <span className="absolute inset-0 rounded-full bg-white animate-ping" />
-                    <span className="relative rounded-full bg-white w-2.5 h-2.5" />
-                  </span>
+                  <span className="relative flex w-2.5 h-2.5"><span className="absolute inset-0 rounded-full bg-white animate-ping" /><span className="relative rounded-full bg-white w-2.5 h-2.5" /></span>
                   WATCH LIVE NOW
                 </span>
               </button>
               <div className="text-gray-500 text-xs flex items-center gap-2">
                 <span className="w-1.5 h-1.5 bg-green-400 rounded-full" />
-                {Math.floor(Math.random() * 5000 + 1000)} watching
+                {viewerCount} watching
               </div>
             </div>
           )}
@@ -340,10 +295,8 @@ export default function HeroSection({ mainEvent, fighter1Data, fighter2Data, has
               </div>
               <p className="text-ufc-gold text-xs uppercase tracking-[0.2em] font-semibold mb-4">Event Starts In</p>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                <Link
-                  href={`/events/${mainEvent.eventId}`}
-                  className="bg-ufc-red text-white px-10 py-3.5 text-sm uppercase tracking-[0.15em] font-bold rounded-full hover:bg-red-700 transition-all duration-300 shadow-lg shadow-red-900/40 hover:shadow-red-900/60 btn-shine w-full sm:w-auto text-center"
-                >
+                <Link href={`/events/${mainEvent.eventId}`}
+                  className="bg-ufc-red text-white px-10 py-3.5 text-sm uppercase tracking-[0.15em] font-bold rounded-full hover:bg-red-700 transition-all duration-300 shadow-lg shadow-red-900/40 hover:shadow-red-900/60 btn-shine w-full sm:w-auto text-center">
                   VIEW FULL CARD
                 </Link>
                 <button className="border border-gray-600 text-gray-300 px-10 py-3.5 text-sm uppercase tracking-[0.15em] rounded-full hover:bg-white/5 hover:border-gray-500 transition-all duration-300 w-full sm:w-auto text-center">
@@ -355,18 +308,8 @@ export default function HeroSection({ mainEvent, fighter1Data, fighter2Data, has
 
           {status === 'finished' && (
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-              <Link
-                href="/replays"
-                className="bg-ufc-red text-white px-10 py-3.5 text-sm uppercase tracking-[0.15em] font-bold rounded-full hover:bg-red-700 transition-all duration-300 shadow-lg shadow-red-900/40 btn-shine w-full sm:w-auto text-center"
-              >
-                WATCH REPLAY
-              </Link>
-              <Link
-                href={`/events/${mainEvent.eventId}`}
-                className="border border-gray-600 text-gray-300 px-10 py-3.5 text-sm uppercase tracking-[0.15em] rounded-full hover:bg-white/5 hover:border-gray-500 transition-all duration-300 w-full sm:w-auto text-center"
-              >
-                VIEW RESULTS
-              </Link>
+              <Link href="/replays" className="bg-ufc-red text-white px-10 py-3.5 text-sm uppercase tracking-[0.15em] font-bold rounded-full hover:bg-red-700 transition-all duration-300 shadow-lg shadow-red-900/40 btn-shine w-full sm:w-auto text-center">WATCH REPLAY</Link>
+              <Link href={`/events/${mainEvent.eventId}`} className="border border-gray-600 text-gray-300 px-10 py-3.5 text-sm uppercase tracking-[0.15em] rounded-full hover:bg-white/5 hover:border-gray-500 transition-all duration-300 w-full sm:w-auto text-center">VIEW RESULTS</Link>
             </div>
           )}
 
