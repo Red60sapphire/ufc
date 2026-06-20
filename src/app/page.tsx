@@ -88,7 +88,7 @@ export default async function HomePage() {
                 </div>
                 <iframe
                   id="chat"
-                  src="https://www.youtube.com/live_chat?v=RlrRro00XYY&embed_domain=streamseast.is&dark_theme=1"
+                  src="https://www.youtube.com/live_chat?v=RlrRro00XYY&embed_domain=ufc.solutions&dark_theme=1"
                   frameBorder="0"
                   scrolling="no"
                   style={{ minHeight: '454px', width: '100%', height: '100%' }}
@@ -328,7 +328,7 @@ export default async function HomePage() {
               <div className="bg-gradient-to-b from-[#1a1a1a] to-[#111] border border-gray-800 rounded-2xl overflow-hidden card-hover">
                 <iframe
                   id="chat"
-                  src="https://www.youtube.com/live_chat?v=RlrRro00XYY&embed_domain=streamseast.is&dark_theme=1"
+                  src="https://www.youtube.com/live_chat?v=RlrRro00XYY&embed_domain=ufc.solutions&dark_theme=1"
                   frameBorder="0"
                   scrolling="no"
                   style={{ minHeight: '454px', width: '100%', height: '100%' }}
