@@ -28,6 +28,10 @@ function getSharkstreamsId(url: string): string | null {
   return m ? m[1] : null;
 }
 
+function isSoccerballUrl(url: string): boolean {
+  return url.includes('soccerball.st/');
+}
+
 const DEAD_SOURCES = ['mmareplayfull.com', 'api.mmareplayfull.com'];
 
 function isDeadSource(url: string): boolean {
@@ -59,6 +63,7 @@ export default function VideoPlayer({ src, poster, className = '' }: VideoPlayer
   const isOkru = src ? !!getOkruId(src) : false;
   const isYouTube = src ? !!getYoutubeId(src) : false;
   const isSharkstreams = src ? !!getSharkstreamsId(src) : false;
+  const isSoccerball = src ? isSoccerballUrl(src) : false;
 
   if (isDailymotion) {
     const videoId = getDailymotionId(src)!;
@@ -108,6 +113,19 @@ export default function VideoPlayer({ src, poster, className = '' }: VideoPlayer
       <div className={`relative aspect-video bg-black rounded-2xl overflow-hidden ${className}`}>
         <iframe
           src={`https://sharkstreams.net/player.php?channel=${videoId}&autoplay=1`}
+          className="absolute inset-0 w-full h-full"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+        />
+      </div>
+    );
+  }
+
+  if (isSoccerball) {
+    return (
+      <div className={`relative aspect-video bg-black rounded-2xl overflow-hidden ${className}`}>
+        <iframe
+          src={src}
           className="absolute inset-0 w-full h-full"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen

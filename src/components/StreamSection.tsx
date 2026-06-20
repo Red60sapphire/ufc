@@ -10,6 +10,7 @@ interface Stream {
   thumbnail_url: string | null;
   is_live: number;
   username: string;
+  source?: string | null;
 }
 
 export default function StreamSection({ streams }: { streams: Stream[] }) {
@@ -30,14 +31,14 @@ export default function StreamSection({ streams }: { streams: Stream[] }) {
       const v = url.split('vimeo.com/')[1]?.split('/')[0];
       return v ? `https://player.vimeo.com/video/${v}` : url;
     }
-    if (url.includes('sharkstreams.net/player.php?channel=')) {
+    if (url.includes('sharkstreams.net/player.php?channel=') || url.includes('soccerball.st/')) {
       return url;
     }
     return url;
   };
 
   const isEmbed = (url: string) =>
-    url.includes('youtube') || url.includes('youtu.be') || url.includes('vimeo') || url.includes('sharkstreams.net');
+    url.includes('youtube') || url.includes('youtu.be') || url.includes('vimeo') || url.includes('sharkstreams.net') || url.includes('soccerball.st');
 
   return (
     <div>
@@ -62,7 +63,7 @@ export default function StreamSection({ streams }: { streams: Stream[] }) {
               }`}
             >
               {s.is_live && <span className="mr-1.5 inline-block w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />}
-              {s.title}
+              {(s as any).source || s.title}
             </button>
           ))}
         </div>

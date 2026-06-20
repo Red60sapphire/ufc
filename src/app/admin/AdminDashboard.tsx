@@ -217,6 +217,7 @@ function StreamsTab({ streams, onRefresh }: { streams: Stream[]; onRefresh: () =
   const [description, setDescription] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
   const [thumbnailUrl, setThumbnailUrl] = useState('');
+  const [source, setSource] = useState('');
   const [isLive, setIsLive] = useState(false);
   const [error, setError] = useState('');
   const [showAdd, setShowAdd] = useState(false);
@@ -227,11 +228,11 @@ function StreamsTab({ streams, onRefresh }: { streams: Stream[]; onRefresh: () =
     const res = await fetch('/api/streams', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, description, video_url: videoUrl, thumbnail_url: thumbnailUrl, is_live: isLive ? 1 : 0 }),
+      body: JSON.stringify({ title, description, video_url: videoUrl, thumbnail_url: thumbnailUrl, is_live: isLive ? 1 : 0, source }),
     });
     const data = await res.json();
     if (data.success) {
-      setTitle(''); setDescription(''); setVideoUrl(''); setThumbnailUrl(''); setIsLive(false);
+      setTitle(''); setDescription(''); setVideoUrl(''); setThumbnailUrl(''); setSource(''); setIsLive(false);
       setShowAdd(false);
       onRefresh();
     } else {
@@ -284,6 +285,10 @@ function StreamsTab({ streams, onRefresh }: { streams: Stream[]; onRefresh: () =
             <div>
               <label className="block text-gray-400 text-[10px] uppercase tracking-wider mb-1.5">Thumbnail URL</label>
               <input value={thumbnailUrl} onChange={(e) => setThumbnailUrl(e.target.value)} placeholder="Optional thumbnail" className="w-full bg-white/5 border border-gray-700/50 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-ufc-red/50 transition-all" />
+            </div>
+            <div>
+              <label className="block text-gray-400 text-[10px] uppercase tracking-wider mb-1.5">Source</label>
+              <input value={source} onChange={(e) => setSource(e.target.value)} placeholder="e.g. Sharkstreams, Soccerball" className="w-full bg-white/5 border border-gray-700/50 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-ufc-red/50 transition-all" />
             </div>
           </div>
           <label className="flex items-center gap-2 text-gray-300 text-sm bg-white/[0.03] rounded-xl px-4 py-3">

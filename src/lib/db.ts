@@ -58,6 +58,7 @@ export async function initDb() {
       video_url TEXT NOT NULL,
       thumbnail_url TEXT,
       is_live INTEGER DEFAULT 0,
+      source TEXT,
       created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )

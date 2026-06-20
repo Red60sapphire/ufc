@@ -27,10 +27,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { title, description, video_url, thumbnail_url, is_live } = await request.json();
+    const { title, description, video_url, thumbnail_url, is_live, source } = await request.json();
     await query`
-      INSERT INTO streams (title, description, video_url, thumbnail_url, is_live, created_by)
-      VALUES (${title}, ${description || null}, ${video_url}, ${thumbnail_url || null}, ${is_live || 0}, ${user.id})
+      INSERT INTO streams (title, description, video_url, thumbnail_url, is_live, source, created_by)
+      VALUES (${title}, ${description || null}, ${video_url}, ${thumbnail_url || null}, ${is_live || 0}, ${source || null}, ${user.id})
     `;
     return NextResponse.json({ success: true });
   } catch (err) {
