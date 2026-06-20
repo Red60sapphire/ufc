@@ -28,15 +28,15 @@ export async function POST(request: NextRequest) {
   const cookieStore = await cookies();
   const user = getUser(cookieStore);
   if (!user?.is_admin) {
-    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 403 });
+    return NextResponse.json({ success: false, error: 'Unauthorized - user: ' + JSON.stringify(user) }, { status: 403 });
   }
 
   try {
-    const { title, description, video_url, thumbnail_url, is_live } = await request.json();
+    const { title, description, video_url, thumbnail_url, is_live, source } = await request.json();
     const db = getDb();
     await db`
-      INSERT INTO streams (title, description, video_url, thumbnail_url, is_live, created_by)
-      VALUES (${title}, ${description || null}, ${video_url}, ${thumbnail_url || null}, ${is_live || 0}, ${user.id})
+      INSERT INTO streams (title, description, video_url, thumbnail_url, is_live, source, created_by)
+      VALUES (${title}, ${description || null}, ${video_url}, ${thumbnail_url || null}, ${is_live || 0}, ${source || null}, ${user.id})
     `;
     return NextResponse.json({ success: true });
   } catch (err) {

@@ -58,6 +58,7 @@ export async function initDb() {
       video_url TEXT NOT NULL,
       thumbnail_url TEXT,
       is_live INTEGER DEFAULT 0,
+      source TEXT,
       created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
@@ -119,6 +120,14 @@ export async function initDb() {
   for (const m of migs) {
     try { await (db as any).query(m); } catch (e: any) { if (!e.message?.includes('already exists')) throw e; }
   }
+  const colMigs = [
+    'ALTER TABLE ufc_replays ADD COLUMN IF NOT EXISTS source TEXT DEFAULT \'mmareplayfull\'',
+    'ALTER TABLE ufc_replays ADD COLUMN IF NOT EXISTS embed_sources TEXT',
+  ];
+  for (const m of colMigs) {
+    try { await (db as any).query(m); } catch {} 
+  }
+  try { await (db as any).query("UPDATE ufc_replays SET source = 'mmareplayfull' WHERE source IS NULL AND video_url LIKE '%mmareplayfull%'"); } catch {}
   const adminExists = await queryRaw`SELECT COUNT(*) as count FROM users WHERE username = 'admin'`;
   if (adminExists[0]?.count === '0' || adminExists[0]?.count === 0) {
     const bcrypt = await import('bcryptjs');

@@ -7,7 +7,7 @@ import FightCardPanel from "@/components/FightCardPanel";
 import UpcomingEventsCarousel from "@/components/UpcomingEventsCarousel";
 import NewsPanel from "@/components/NewsPanel";
 import StreamSection from "@/components/StreamSection";
-import ChatBox from "@/components/ChatBox";
+import FightPoll from "@/components/FightPoll";
 
 export default async function HomePage() {
   const [eventsData, newsData, streams, rankingsData, replays] = await Promise.all([
@@ -15,7 +15,7 @@ export default async function HomePage() {
     getNewsWithFallback(5),
     query`SELECT s.*, u.username FROM streams s JOIN users u ON s.created_by = u.id ORDER BY s.is_live DESC, s.created_at DESC`,
     getRankingsWithAthletes(),
-    query`SELECT * FROM ufc_replays WHERE published = 1 ORDER BY featured DESC, views DESC LIMIT 10`,
+    query`SELECT * FROM ufc_replays WHERE published = 1 AND promotion = 'UFC' AND (source IS NULL OR source != 'mmareplayfull') ORDER BY event_date DESC NULLS LAST LIMIT 10`,
   ]);
 
   const events = eventsData.length > 0 ? eventsData : [];
@@ -81,7 +81,19 @@ export default async function HomePage() {
           <section className="animate-in stagger-1">
             <StreamSection streams={streams} />
             <div className="mt-8">
-              <ChatBox streams={streams} />
+              <div className="bg-gradient-to-b from-[#1a1a1a] to-[#111] border border-gray-800 rounded-2xl overflow-hidden card-hover">
+                <div className="flex items-center gap-3 mb-3 px-4 py-3 border-b border-gray-800">
+                  <div className="h-4 w-1 bg-ufc-red rounded-full" />
+                  <h2 className="text-white text-sm uppercase tracking-wider font-bold">Live Chat</h2>
+                </div>
+                <iframe
+                  id="chat"
+                  src="https://www.youtube.com/live_chat?v=RlrRro00XYY&embed_domain=ufc.solutions&dark_theme=1"
+                  frameBorder="0"
+                  scrolling="no"
+                  style={{ minHeight: '454px', width: '100%', height: '100%' }}
+                />
+              </div>
             </div>
           </section>
         ) : (
@@ -104,6 +116,20 @@ export default async function HomePage() {
             <StatCard value={divisionCount || 8} label="Divisions" icon="scale" />
             <StatCard value={news.length} label="News" icon="news" />
           </div>
+        </section>
+
+        <section className="animate-in stagger-2 max-w-xl mx-auto w-full">
+          <FightPoll
+            fighter1={mainEvent.fighter1}
+            fighter2={mainEvent.fighter2}
+            fighter1Img={mainEvent.fighter1Img}
+            fighter2Img={mainEvent.fighter2Img}
+            fighter1Record={mainEvent.fighter1Record}
+            fighter2Record={mainEvent.fighter2Record}
+            f1Id={fighter1Id}
+            f2Id={fighter2Id}
+            weightClass={mainEvent.weightClass}
+          />
         </section>
 
         {mainEvent.date && (
@@ -256,40 +282,7 @@ export default async function HomePage() {
           </section>
         )}
 
-        {activeReplays.length > 0 && (
-          <section className="animate-in stagger-4">
-            <SectionHeader label="Featured Replays">
-              <Link href="/replays" className="text-ufc-red text-xs uppercase tracking-wider font-semibold hover:text-red-300 transition">All Replays →</Link>
-            </SectionHeader>
-            <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-3">
-              {activeReplays.map((r: any) => (
-                <Link key={r.id} href={`/replays/${r.id}`}
-                  className="flex-shrink-0 w-56 md:w-64 group card-hover"
-                >
-                  <div className="relative aspect-video bg-gray-900 rounded-xl overflow-hidden border border-gray-800/60 group-hover:border-ufc-red/30 transition-all duration-300">
-                    {r.thumbnail ? (
-                      <img src={r.thumbnail} alt={r.title || ''} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                    ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
-                        <svg className="w-8 h-8 text-gray-700" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" /></svg>
-                      </div>
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                    <div className="absolute bottom-2 left-2 right-2 flex items-center gap-2">
-                      {r.duration && <span className="bg-black/70 text-white text-[9px] px-1.5 py-0.5 rounded font-medium">{r.duration}</span>}
-                      <span className="bg-black/70 text-ufc-gold text-[9px] px-1.5 py-0.5 rounded font-medium">HD</span>
-                      {r.views > 0 && <span className="bg-black/70 text-gray-300 text-[9px] px-1.5 py-0.5 rounded font-medium">{r.views} views</span>}
-                    </div>
-                  </div>
-                  <p className="text-white text-xs font-semibold mt-2 truncate group-hover:text-ufc-red transition-colors">
-                    {r.title || `${r.fighter1} vs ${r.fighter2}`}
-                  </p>
-                  <p className="text-gray-600 text-[10px] truncate">{r.event_name || r.event || ''}</p>
-                </Link>
-              ))}
-            </div>
-          </section>
-        )}
+
 
         <section className="animate-in stagger-5">
           <SectionHeader label="News & Spotlight" />
@@ -332,7 +325,15 @@ export default async function HomePage() {
             </section>
             <section className="animate-in stagger-5">
               <SectionHeader label="Chat" />
-              <ChatBox streams={streams} />
+              <div className="bg-gradient-to-b from-[#1a1a1a] to-[#111] border border-gray-800 rounded-2xl overflow-hidden card-hover">
+                <iframe
+                  id="chat"
+                  src="https://www.youtube.com/live_chat?v=RlrRro00XYY&embed_domain=ufc.solutions&dark_theme=1"
+                  frameBorder="0"
+                  scrolling="no"
+                  style={{ minHeight: '454px', width: '100%', height: '100%' }}
+                />
+              </div>
             </section>
           </>
         )}

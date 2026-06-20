@@ -44,7 +44,10 @@ export async function GET(request: NextRequest) {
     const params: any[] = [];
     let idx = 1;
 
-    if (!admin) conditions.push('published = 1');
+    if (!admin) {
+      conditions.push('published = 1');
+      conditions.push("(source IS NULL OR source != 'mmareplayfull')");
+    }
     if (search) {
       params.push(`%${search}%`);
       conditions.push(`(title ILIKE $${idx} OR fighter1 ILIKE $${idx} OR fighter2 ILIKE $${idx} OR event_name ILIKE $${idx} OR promotion ILIKE $${idx})`);

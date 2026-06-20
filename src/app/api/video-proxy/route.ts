@@ -1,14 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const ALLOWED_HOSTS = ['api.mmareplayfull.com', 'portal.portalmma.cc', 'mmareplayfull.com'];
+const MAX_RETRIES = 2;
+const FETCH_TIMEOUT = 15000;
+
+async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_RETRIES): Promise<Response> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+      const response = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(timeout);
+      return response;
+    } catch (err: any) {
+      console.error(`[video-proxy] Attempt ${attempt + 1}/${retries + 1} failed:`, err?.message || err);
+      if (attempt === retries) throw err;
+      await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+    }
+  }
+  throw new Error('Unreachable');
+}
 
 export async function OPTIONS() {
   return new NextResponse(null, {
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
-      'Access-Control-Allow-Headers': '*',
-    },
+    headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS', 'Access-Control-Allow-Headers': '*' },
   });
 }
 
@@ -25,21 +39,24 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
   }
 
-  if (!ALLOWED_HOSTS.includes(targetUrl.hostname)) {
-    return NextResponse.json({ error: 'Host not allowed' }, { status: 403 });
+  if (targetUrl.hostname.includes('mmareplayfull.com')) {
+    console.warn(`[video-proxy] Blocked dead domain: ${targetUrl.hostname}`);
+    return NextResponse.json({ error: 'Source unavailable', detail: 'MMAReplayFull is no longer available. Run /api/scrape to fetch fresh replays from fullfightreplays.com.' }, { status: 410 });
   }
 
   try {
-    const response = await fetch(targetUrl.toString(), {
+    console.log(`[video-proxy] Fetching: ${targetUrl.toString()}`);
+    const response = await fetchWithRetry(targetUrl.toString(), {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'application/vnd.apple.mpegurl,application/x-mpegURL,video/mp2t,video/mp4,*/*',
-        'Referer': 'https://mmareplayfull.com/',
       },
     });
 
     if (!response.ok) {
-      return new NextResponse(await response.text(), {
+      console.warn(`[video-proxy] Upstream ${response.status} for ${targetUrl.toString()}`);
+      const body = await response.text().catch(() => '');
+      return new NextResponse(body || response.statusText, {
         status: response.status,
         headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS', 'Access-Control-Allow-Headers': '*' },
       });
@@ -54,28 +71,19 @@ export async function GET(request: NextRequest) {
       'Access-Control-Allow-Headers': '*',
       'Cache-Control': 'public, max-age=60',
     };
-
-    if (contentType) {
-      resHeaders['Content-Type'] = contentType;
-    }
+    if (contentType) resHeaders['Content-Type'] = contentType;
 
     if (isPlaylist) {
       let body = await response.text();
-      // 1. Rewrite relative paths (except already-proxied URLs)
-      body = body.replace(/^\/(?!api\/video-proxy)[^\s#]+/gm, (match) => {
-        const fullUrl = `https://api.mmareplayfull.com${match}`;
-        return `/api/video-proxy?url=${encodeURIComponent(fullUrl)}`;
-      });
-      // 2. Rewrite absolute URLs from allowed hosts
-      body = body.replace(/^(https?:\/\/[^\s]+)/gm, (match) => {
+      body = body.split('\n').map((line: string) => {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('#') || trimmed === '') return line;
         try {
-          const u = new URL(match);
-          if (ALLOWED_HOSTS.includes(u.hostname)) {
-            return `/api/video-proxy?url=${encodeURIComponent(match)}`;
-          }
+          const resolved = new URL(trimmed, targetUrl).toString();
+          return `/api/video-proxy?url=${encodeURIComponent(resolved)}`;
         } catch {}
-        return match;
-      });
+        return line;
+      }).join('\n');
       return new NextResponse(body, { headers: resHeaders });
     }
 
@@ -83,10 +91,9 @@ export async function GET(request: NextRequest) {
       return new NextResponse(null, { headers: resHeaders });
     }
 
-    return new NextResponse(response.body, {
-      headers: resHeaders,
-    });
-  } catch {
-    return NextResponse.json({ error: 'Proxy failed' }, { status: 502 });
+    return new NextResponse(response.body, { headers: resHeaders });
+  } catch (err: any) {
+    console.error(`[video-proxy] Fatal error for ${targetUrl?.toString() || urlParam}:`, err?.message || err);
+    return NextResponse.json({ error: `Proxy failed: ${err?.message || 'Unknown'}` }, { status: 502 });
   }
 }

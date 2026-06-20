@@ -138,7 +138,7 @@ export default function AdminDashboard({ user }: { user: { id: number; username:
         </div>
 
         {tab === 'dashboard' && <DashboardTab stats={stats!} recentUsers={recentUsers} recentMessages={recentMessages} />}
-        {tab === 'streams' && <StreamsTab streams={streams} onRefresh={() => fetch('/api/streams').then(r => r.json()).then(d => { if (d.streams) setStreams(d.streams); })} />}
+        {tab === 'streams' && <StreamsTab streams={streams} onRefresh={async () => { const r = await fetch('/api/streams'); const d = await r.json(); if (d.streams) setStreams(d.streams); }} />}
         {tab === 'replays' && <ReplaysTab replays={replays} onRefresh={() => fetch('/api/replays').then(r => r.json()).then(d => { if (d.replays) setReplays(d.replays); })} />}
         {tab === 'users' && <UsersTab users={recentUsers} />}
         {tab === 'chatlog' && <ChatLogTab messages={allMessages} />}
@@ -217,25 +217,37 @@ function StreamsTab({ streams, onRefresh }: { streams: Stream[]; onRefresh: () =
   const [description, setDescription] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
   const [thumbnailUrl, setThumbnailUrl] = useState('');
+  const [source, setSource] = useState('');
   const [isLive, setIsLive] = useState(false);
   const [error, setError] = useState('');
   const [showAdd, setShowAdd] = useState(false);
 
   const handleAdd = async (e: FormEvent) => {
     e.preventDefault();
-    setError('');
-    const res = await fetch('/api/streams', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, description, video_url: videoUrl, thumbnail_url: thumbnailUrl, is_live: isLive ? 1 : 0 }),
-    });
-    const data = await res.json();
-    if (data.success) {
-      setTitle(''); setDescription(''); setVideoUrl(''); setThumbnailUrl(''); setIsLive(false);
-      setShowAdd(false);
-      onRefresh();
-    } else {
-      setError(data.error || 'Failed to add stream');
+    try {
+      console.log('handleAdd called', { title, videoUrl, isLive, source });
+      setError('');
+      const payload = { title, description, video_url: videoUrl, thumbnail_url: thumbnailUrl, is_live: isLive ? 1 : 0, source };
+      console.log('Sending payload:', payload);
+      const res = await fetch('/api/streams', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      console.log('Response status:', res.status);
+      const data = await res.json();
+      console.log('Response data:', data);
+if (data.success) {
+        alert('Stream added successfully!');
+        setTitle(''); setDescription(''); setVideoUrl(''); setThumbnailUrl(''); setSource(''); setIsLive(false);
+        setShowAdd(false);
+        onRefresh();
+      } else {
+        setError(data.error || 'Failed to add stream');
+      }
+    } catch (err) {
+      console.error('handleAdd error:', err);
+      setError('Error: ' + (err instanceof Error ? err.message : String(err)));
     }
   };
 
@@ -284,6 +296,10 @@ function StreamsTab({ streams, onRefresh }: { streams: Stream[]; onRefresh: () =
             <div>
               <label className="block text-gray-400 text-[10px] uppercase tracking-wider mb-1.5">Thumbnail URL</label>
               <input value={thumbnailUrl} onChange={(e) => setThumbnailUrl(e.target.value)} placeholder="Optional thumbnail" className="w-full bg-white/5 border border-gray-700/50 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-ufc-red/50 transition-all" />
+            </div>
+            <div>
+              <label className="block text-gray-400 text-[10px] uppercase tracking-wider mb-1.5">Source</label>
+              <input value={source} onChange={(e) => setSource(e.target.value)} placeholder="e.g. Sharkstreams, Soccerball" className="w-full bg-white/5 border border-gray-700/50 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-ufc-red/50 transition-all" />
             </div>
           </div>
           <label className="flex items-center gap-2 text-gray-300 text-sm bg-white/[0.03] rounded-xl px-4 py-3">

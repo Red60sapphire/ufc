@@ -15,7 +15,7 @@ export default function ReplaysPage() {
   const fetchReplays = async (s: string, sortBy: string) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ sort: sortBy, limit: '200' });
+      const params = new URLSearchParams({ sort: sortBy, limit: '200', promotion: 'UFC' });
       if (s) params.set('search', s);
       const res = await fetch(`/api/replays?${params}`);
       const data = await res.json();
