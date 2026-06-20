@@ -16,7 +16,7 @@ export default async function HomePage() {
     getNewsWithFallback(5),
     query`SELECT s.*, u.username FROM streams s JOIN users u ON s.created_by = u.id ORDER BY s.is_live DESC, s.created_at DESC`,
     getRankingsWithAthletes(),
-    query`SELECT * FROM ufc_replays WHERE published = 1 AND (source IS NULL OR source != 'mmareplayfull') ORDER BY created_at DESC LIMIT 10`,
+    query`SELECT * FROM ufc_replays WHERE published = 1 AND promotion = 'UFC' AND (source IS NULL OR source != 'mmareplayfull') ORDER BY event_date DESC NULLS LAST LIMIT 10`,
   ]);
 
   const events = eventsData.length > 0 ? eventsData : [];

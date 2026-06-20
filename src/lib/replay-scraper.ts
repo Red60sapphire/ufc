@@ -1,6 +1,7 @@
 import { rawQueryOrThrow, query } from './db';
 
 const BASE = 'https://fullfightreplays.com';
+const SCRAPE_PATH = '/ufc';
 const MAX_RETRIES = 2;
 
 async function fetchPage(url: string): Promise<string> {
@@ -254,7 +255,7 @@ export async function scrapeAll(maxPages = 5): Promise<{
     const entries: ScrapedEntry[] = [];
     for (let page = 1; page <= maxPages; page++) {
       try {
-        const url = page === 1 ? BASE : `${BASE}/?page${page}`;
+        const url = page === 1 ? `${BASE}${SCRAPE_PATH}` : `${BASE}${SCRAPE_PATH}?page${page}`;
         console.log(`[FFR-SCRAPER] Fetching page ${page}: ${url}`);
         const html = await fetchPage(url);
         const pageEntries = extractListEntries(html);
