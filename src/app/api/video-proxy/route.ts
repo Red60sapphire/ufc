@@ -39,6 +39,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
   }
 
+  if (targetUrl.hostname.includes('mmareplayfull.com')) {
+    console.warn(`[video-proxy] Blocked dead domain: ${targetUrl.hostname}`);
+    return NextResponse.json({ error: 'Source unavailable', detail: 'MMAReplayFull is no longer available. Run /api/scrape to fetch fresh replays from fullfightreplays.com.' }, { status: 410 });
+  }
+
   try {
     console.log(`[video-proxy] Fetching: ${targetUrl.toString()}`);
     const response = await fetchWithRetry(targetUrl.toString(), {

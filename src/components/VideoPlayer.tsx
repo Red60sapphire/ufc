@@ -23,12 +23,32 @@ function getYoutubeId(url: string): string | null {
   return m ? m[1] : null;
 }
 
+const DEAD_SOURCES = ['mmareplayfull.com', 'api.mmareplayfull.com'];
+
+function isDeadSource(url: string): boolean {
+  return DEAD_SOURCES.some(d => url.includes(d));
+}
+
 export default function VideoPlayer({ src, poster, className = '' }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
   const hlsRef = useRef<any>(null);
+
+  const sourceDead = src ? isDeadSource(src) || isDeadSource(decodeURIComponent(src)) : false;
+
+  if (sourceDead) {
+    return (
+      <div className={`relative aspect-video bg-black rounded-2xl overflow-hidden ${className}`}>
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500 gap-3 bg-black/80 p-6 text-center">
+          <svg className="w-10 h-10 text-gray-600" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
+          <span className="text-xs text-gray-500">This replay is from MMAReplayFull, which is no longer available.</span>
+          <p className="text-[10px] text-gray-600 max-w-xs">New replays are being sourced from fullfightreplays.com. Check back later or run the scraper.</p>
+        </div>
+      </div>
+    );
+  }
 
   const isDailymotion = src ? !!getDailymotionId(src) : false;
   const isOkru = src ? !!getOkruId(src) : false;
