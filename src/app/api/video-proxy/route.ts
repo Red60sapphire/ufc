@@ -61,21 +61,17 @@ export async function GET(request: NextRequest) {
 
     if (isPlaylist) {
       let body = await response.text();
-      // 1. Rewrite relative paths (except already-proxied URLs)
-      body = body.replace(/^\/(?!api\/video-proxy)[^\s#]+/gm, (match) => {
-        const fullUrl = `https://api.mmareplayfull.com${match}`;
-        return `/api/video-proxy?url=${encodeURIComponent(fullUrl)}`;
-      });
-      // 2. Rewrite absolute URLs from allowed hosts
-      body = body.replace(/^(https?:\/\/[^\s]+)/gm, (match) => {
+      body = body.split('\n').map((line: string) => {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('#') || trimmed === '') return line;
         try {
-          const u = new URL(match);
-          if (ALLOWED_HOSTS.includes(u.hostname)) {
-            return `/api/video-proxy?url=${encodeURIComponent(match)}`;
+          const resolved = new URL(trimmed, targetUrl).toString();
+          if (ALLOWED_HOSTS.includes(new URL(resolved).hostname)) {
+            return `/api/video-proxy?url=${encodeURIComponent(resolved)}`;
           }
         } catch {}
-        return match;
-      });
+        return line;
+      }).join('\n');
       return new NextResponse(body, { headers: resHeaders });
     }
 
