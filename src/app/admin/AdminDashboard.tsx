@@ -138,7 +138,7 @@ export default function AdminDashboard({ user }: { user: { id: number; username:
         </div>
 
         {tab === 'dashboard' && <DashboardTab stats={stats!} recentUsers={recentUsers} recentMessages={recentMessages} />}
-        {tab === 'streams' && <StreamsTab streams={streams} onRefresh={() => fetch('/api/streams').then(r => r.json()).then(d => { if (d.streams) setStreams(d.streams); })} />}
+        {tab === 'streams' && <StreamsTab streams={streams} onRefresh={async () => { const r = await fetch('/api/streams'); const d = await r.json(); if (d.streams) setStreams(d.streams); }} />}
         {tab === 'replays' && <ReplaysTab replays={replays} onRefresh={() => fetch('/api/replays').then(r => r.json()).then(d => { if (d.replays) setReplays(d.replays); })} />}
         {tab === 'users' && <UsersTab users={recentUsers} />}
         {tab === 'chatlog' && <ChatLogTab messages={allMessages} />}
@@ -237,7 +237,8 @@ function StreamsTab({ streams, onRefresh }: { streams: Stream[]; onRefresh: () =
       console.log('Response status:', res.status);
       const data = await res.json();
       console.log('Response data:', data);
-      if (data.success) {
+if (data.success) {
+        alert('Stream added successfully!');
         setTitle(''); setDescription(''); setVideoUrl(''); setThumbnailUrl(''); setSource(''); setIsLive(false);
         setShowAdd(false);
         onRefresh();
