@@ -225,10 +225,11 @@ function StreamsTab({ streams, onRefresh }: { streams: Stream[]; onRefresh: () =
   const handleAdd = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
+    const payload = { title, description, video_url: videoUrl, thumbnail_url: thumbnailUrl, is_live: isLive ? 1 : 0, source };
     const res = await fetch('/api/streams', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, description, video_url: videoUrl, thumbnail_url: thumbnailUrl, is_live: isLive ? 1 : 0, source }),
+      body: JSON.stringify(payload),
     });
     const data = await res.json();
     if (data.success) {

@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
   const cookieStore = await cookies();
   const user = getUser(cookieStore);
   if (!user?.is_admin) {
-    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 403 });
+    return NextResponse.json({ success: false, error: 'Unauthorized - user: ' + JSON.stringify(user) }, { status: 403 });
   }
 
   try {
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     `;
     return NextResponse.json({ success: true });
   } catch (err) {
-    return NextResponse.json({ success: false, error: 'Failed to create stream' }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Failed to create stream: ' + (err instanceof Error ? err.message : String(err)) }, { status: 500 });
   }
 }
 
