@@ -126,6 +126,7 @@ export async function initDb() {
   for (const m of colMigs) {
     try { await (db as any).query(m); } catch {} 
   }
+  try { await (db as any).query("UPDATE ufc_replays SET source = 'mmareplayfull' WHERE source IS NULL AND video_url LIKE '%mmareplayfull%'"); } catch {}
   const adminExists = await queryRaw`SELECT COUNT(*) as count FROM users WHERE username = 'admin'`;
   if (adminExists[0]?.count === '0' || adminExists[0]?.count === 0) {
     const bcrypt = await import('bcryptjs');
