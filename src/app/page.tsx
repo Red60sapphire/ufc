@@ -271,40 +271,7 @@ export default async function HomePage() {
           </section>
         )}
 
-        {activeReplays.length > 0 && (
-          <section className="animate-in stagger-4">
-            <SectionHeader label="Featured Replays">
-              <Link href="/replays" className="text-ufc-red text-xs uppercase tracking-wider font-semibold hover:text-red-300 transition">All Replays →</Link>
-            </SectionHeader>
-            <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-3">
-              {activeReplays.map((r: any) => (
-                <Link key={r.id} href={`/replays/${r.id}`}
-                  className="flex-shrink-0 w-56 md:w-64 group card-hover"
-                >
-                  <div className="relative aspect-video bg-gray-900 rounded-xl overflow-hidden border border-gray-800/60 group-hover:border-ufc-red/30 transition-all duration-300">
-                    {r.thumbnail ? (
-                      <img src={r.thumbnail} alt={r.title || ''} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                    ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
-                        <svg className="w-8 h-8 text-gray-700" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" /></svg>
-                      </div>
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                    <div className="absolute bottom-2 left-2 right-2 flex items-center gap-2">
-                      {r.duration && <span className="bg-black/70 text-white text-[9px] px-1.5 py-0.5 rounded font-medium">{r.duration}</span>}
-                      <span className="bg-black/70 text-ufc-gold text-[9px] px-1.5 py-0.5 rounded font-medium">HD</span>
-                      {r.views > 0 && <span className="bg-black/70 text-gray-300 text-[9px] px-1.5 py-0.5 rounded font-medium">{r.views} views</span>}
-                    </div>
-                  </div>
-                  <p className="text-white text-xs font-semibold mt-2 truncate group-hover:text-ufc-red transition-colors">
-                    {r.title || `${r.fighter1} vs ${r.fighter2}`}
-                  </p>
-                  <p className="text-gray-600 text-[10px] truncate">{r.event_name || r.event || ''}</p>
-                </Link>
-              ))}
-            </div>
-          </section>
-        )}
+
 
         <section className="animate-in stagger-5">
           <SectionHeader label="News & Spotlight" />
