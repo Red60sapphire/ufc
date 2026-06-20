@@ -30,11 +30,14 @@ export default function StreamSection({ streams }: { streams: Stream[] }) {
       const v = url.split('vimeo.com/')[1]?.split('/')[0];
       return v ? `https://player.vimeo.com/video/${v}` : url;
     }
+    if (url.includes('sharkstreams.net/player.php?channel=')) {
+      return url;
+    }
     return url;
   };
 
   const isEmbed = (url: string) =>
-    url.includes('youtube') || url.includes('youtu.be') || url.includes('vimeo');
+    url.includes('youtube') || url.includes('youtu.be') || url.includes('vimeo') || url.includes('sharkstreams.net');
 
   return (
     <div>
