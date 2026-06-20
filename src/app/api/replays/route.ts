@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
 
     if (!admin) {
       conditions.push('published = 1');
+      conditions.push("(source IS NULL OR source != 'mmareplayfull')");
     }
     if (search) {
       params.push(`%${search}%`);
