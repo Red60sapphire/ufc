@@ -6,7 +6,7 @@ export async function GET() {
   const log = (m: string) => { console.log('[SCRAPE]', m); logs.push(m); };
 
   try {
-    const maxPages = 3;
+    const maxPages = 15;
     log(`Starting fullfightreplays.com scrape (max ${maxPages} pages)...`);
     const result = await scrapeAll(maxPages);
     log(`Done: ${result.pagesScanned} pages, ${result.entriesFound} entries, ${result.newFights} new`);
