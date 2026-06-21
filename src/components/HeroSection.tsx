@@ -278,12 +278,12 @@ export default function HeroSection({ mainEvent, fighter1Data, fighter2Data, isL
 
           {status === 'live' && (
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <button className="group relative bg-ufc-red text-white px-10 py-4 text-sm uppercase tracking-[0.15em] font-bold rounded-full hover:bg-red-700 transition-all duration-300 shadow-lg shadow-red-900/50 hover:shadow-red-900/70 overflow-hidden btn-shine w-full sm:w-auto text-center">
+              <Link href="/watch" className="group relative bg-ufc-red text-white px-10 py-4 text-sm uppercase tracking-[0.15em] font-bold rounded-full hover:bg-red-700 transition-all duration-300 shadow-lg shadow-red-900/50 hover:shadow-red-900/70 overflow-hidden btn-shine w-full sm:w-auto text-center inline-block">
                 <span className="relative z-10 flex items-center gap-2">
                   <span className="relative flex w-2.5 h-2.5"><span className="absolute inset-0 rounded-full bg-white animate-ping" /><span className="relative rounded-full bg-white w-2.5 h-2.5" /></span>
                   WATCH LIVE NOW
                 </span>
-              </button>
+              </Link>
               <div className="text-gray-500 text-xs flex items-center gap-2">
                 <span className="w-1.5 h-1.5 bg-green-400 rounded-full" />
                 {viewerCount} watching

@@ -80,27 +80,6 @@ export default async function HomePage() {
         </div>
       </div>
 
-      {isLive && (
-        <div className="flex flex-col lg:flex-row h-[calc(100vh-116px)] border-b border-gray-800/50 bg-black">
-          <div className="flex-1 bg-black relative">
-            <iframe
-              src="https://soccerball.st/rampages/unoairuf/"
-              className="w-full h-full border-0"
-              allowFullScreen
-              referrerPolicy="no-referrer"
-              sandbox="allow-scripts allow-same-origin allow-fullscreen"
-            />
-          </div>
-          <div className="w-full lg:w-[420px] border-t lg:border-t-0 lg:border-l border-gray-800/50 bg-[#0d0d0d] min-h-[500px] lg:min-h-0">
-            <iframe
-              src="https://www.youtube.com/live_chat?v=RlrRro00XYY&embed_domain=www.ufc.solutions"
-              className="w-full h-full border-0"
-              allow="clipboard-write"
-            />
-          </div>
-        </div>
-      )}
-
       <div className="max-w-7xl mx-auto px-4 py-8 space-y-24">
 
         <section className="animate-in stagger-1">
