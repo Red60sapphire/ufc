@@ -1,6 +1,12 @@
 import { rawQueryOrThrow } from '@/lib/db';
 import type { StreamSource } from '@/lib/stream-scraper';
 
+const FALLBACK: StreamSource[] = [
+  { id: 'soccerball', name: 'Soccer Ball', url: 'https://soccerball.st/rampages/unoairuf/', verified: true },
+  { id: 'statusnode', name: 'StatusNode', url: 'https://statusnode.is/nodejs/?t=2', verified: true },
+  { id: 'streamscenter', name: 'Streams Center', url: 'https://streams.center/embed/ch48.php', verified: true },
+];
+
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
@@ -10,20 +16,21 @@ export async function GET() {
        FROM stream_sources ORDER BY verified DESC, created_at DESC`,
     );
 
-    const sources: StreamSource[] = rows.map((r: any) => ({
-      id: r.source_id,
-      name: r.name,
-      url: r.url,
-      verified: r.verified === 1 || r.verified === true,
-      eventName: r.event_name,
-      eventDate: r.event_date,
-      error: r.error || undefined,
-    }));
+    if (rows.length > 0) {
+      const sources: StreamSource[] = rows.map((r: any) => ({
+        id: r.source_id,
+        name: r.name,
+        url: r.url,
+        verified: r.verified === 1 || r.verified === true,
+        eventName: r.event_name,
+        eventDate: r.event_date,
+        error: r.error || undefined,
+      }));
+      return Response.json({ sources, source: 'database' });
+    }
+  } catch {}
 
-    return Response.json({ sources, source: 'database' });
-  } catch {
-    return Response.json({ sources: [], source: 'empty' });
-  }
+  return Response.json({ sources: FALLBACK, source: 'fallback' });
 }
 
 export async function POST(request: Request) {
