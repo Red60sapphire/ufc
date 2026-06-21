@@ -34,7 +34,8 @@ export default async function HomePage() {
     const diff = Math.abs(eventDate.getTime() - now.getTime());
     return diff < 14400000 && eventDate <= now;
   });
-  const isLive = liveEvents.length > 0;
+  const configEventToday = new Date(ufcConfig.current_event.date).toDateString() === todayStr;
+  const isLive = liveEvents.length > 0 || (events.length === 0 && configEventToday);
 
   const [fighter1Data, fighter2Data] = await Promise.all([
     fighter1Id ? getAthlete(fighter1Id).catch(() => null) : null,
