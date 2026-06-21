@@ -88,6 +88,20 @@ export async function initDb() {
     )
   `;
   await queryRaw`
+    CREATE TABLE IF NOT EXISTS stream_sources (
+      id SERIAL PRIMARY KEY,
+      source_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL,
+      verified INTEGER DEFAULT 0,
+      event_name TEXT,
+      event_date TEXT,
+      error TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `;
+  try { await queryRaw`CREATE UNIQUE INDEX IF NOT EXISTS idx_stream_sources_id ON stream_sources(source_id)`; } catch {}
+  await queryRaw`
     CREATE TABLE IF NOT EXISTS ufc_replays (
       id SERIAL PRIMARY KEY,
       fighter1 TEXT,
