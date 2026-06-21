@@ -8,10 +8,10 @@ export interface StreamSource {
   error?: string;
 }
 
-const USER_AGENT =
+const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
-const FETCH_TIMEOUT = 10000;
-const VERIFY_TIMEOUT = 6000;
+const FAST_TIMEOUT = 4000;
+const VERIFY_TIMEOUT = 3000;
 
 const SITES = [
   { id: 'soccerball', name: 'Soccer Ball', url: 'https://soccerball.st/rampages/unoairuf/' },
@@ -34,42 +34,74 @@ const SITES = [
   { id: 'stream2watch', name: 'Stream2Watch', url: 'https://stream2watch.football/' },
 ];
 
-async function fetchPage(url: string, timeout = FETCH_TIMEOUT): Promise<string | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
+async function fetchFast(url: string): Promise<string | null> {
   try {
     const res = await fetch(url, {
-      headers: { 'User-Agent': USER_AGENT, 'Accept-Language': 'en-US,en;q=0.9' },
-      signal: controller.signal,
+      headers: { 'User-Agent': UA },
+      signal: AbortSignal.timeout(FAST_TIMEOUT),
       redirect: 'follow',
     });
-    if (!res.ok) return null;
-    return await res.text();
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+    return res.ok ? await res.text() : null;
+  } catch { return null; }
 }
 
-async function verifyUrl(url: string): Promise<boolean> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), VERIFY_TIMEOUT);
+async function headFast(url: string): Promise<boolean> {
   try {
     const res = await fetch(url, {
       method: 'HEAD',
-      headers: { 'User-Agent': USER_AGENT },
-      signal: controller.signal,
+      headers: { 'User-Agent': UA },
+      signal: AbortSignal.timeout(VERIFY_TIMEOUT),
     });
     return res.ok;
-  } catch {
-    return false;
-  } finally {
-    clearTimeout(timer);
-  }
+  } catch { return false; }
 }
 
-function normalizeUrl(href: string, base: string): string | null {
+function extractAll(text: string, open: string, close: string): string[] {
+  const out: string[] = [];
+  let idx = 0;
+  while (true) {
+    const s = text.indexOf(open, idx);
+    if (s === -1) break;
+    const e = text.indexOf(close, s + open.length);
+    if (e === -1) break;
+    out.push(text.substring(s + open.length, e));
+    idx = e + close.length;
+  }
+  return out;
+}
+
+function between(text: string, before: string, after: string, start = 0): string | null {
+  const s = text.indexOf(before, start);
+  if (s === -1) return null;
+  const e = text.indexOf(after, s + before.length);
+  return e === -1 ? null : text.substring(s + before.length, e);
+}
+
+function isStreamUrl(u: string): boolean {
+  const l = u.toLowerCase();
+  return /\.(m3u8|mp4|webm|flv)/.test(l) || /(player|embed|stream|live|watch)/.test(l);
+}
+
+function extractEmbeds(html: string): string[] {
+  const found: string[] = [];
+  const seen = new Set<string>();
+  for (const f of extractAll(html, '<iframe', '</iframe>')) {
+    const src = between(f, 'src="', '"') || between(f, "src='", "'");
+    if (src && !seen.has(src)) { seen.add(src); found.push(src); }
+  }
+  for (const a of extractAll(html, '<a', '</a>')) {
+    const href = between(a, 'href="', '"') || between(a, "href='", "'");
+    const text = a.replace(/<[^>]*>/g, '').trim();
+    if (href && !seen.has(href) && isStreamUrl(href + ' ' + text)) { seen.add(href); found.push(href); }
+  }
+  for (const s of extractAll(html, '<source', '>')) {
+    const src = between(s, 'src="', '"') || between(s, "src='", "'");
+    if (src && !seen.has(src)) { seen.add(src); found.push(src); }
+  }
+  return found;
+}
+
+function normalize(href: string, base: string): string | null {
   try {
     let t = href.trim();
     if (t.startsWith('//')) t = 'https:' + t;
@@ -78,180 +110,104 @@ function normalizeUrl(href: string, base: string): string | null {
   } catch { return null; }
 }
 
-function extractBetween(text: string, before: string, after: string, start = 0): string | null {
-  const s = text.indexOf(before, start);
-  if (s === -1) return null;
-  const e = text.indexOf(after, s + before.length);
-  return e === -1 ? null : text.substring(s + before.length, e);
-}
-
-function extractAllBetween(text: string, before: string, after: string): string[] {
-  const out: string[] = [];
-  let idx = 0;
-  while (true) {
-    const s = text.indexOf(before, idx);
-    if (s === -1) break;
-    const e = text.indexOf(after, s + before.length);
-    if (e === -1) break;
-    out.push(text.substring(s + before.length, e));
-    idx = e + after.length;
-  }
-  return out;
-}
-
-function hasUfc(text: string): boolean {
-  return text.toLowerCase().includes('ufc') || /\bmma\b/i.test(text);
-}
-
-function isStreamUrl(url: string): boolean {
-  const l = url.toLowerCase();
-  return /\.(m3u8|mp4|webm|flv)/.test(l) || /(player|embed|stream|live|watch)/.test(l);
-}
-
-function tryExtractEmbeds(html: string): string[] {
-  const found: string[] = [];
-  const seen = new Set<string>();
-  const iframes = extractAllBetween(html, '<iframe', '</iframe>');
-  for (const f of iframes) {
-    const src = extractBetween(f, 'src="', '"') || extractBetween(f, "src='", "'");
-    if (src && !seen.has(src)) { seen.add(src); found.push(src); }
-  }
-  const anchors = extractAllBetween(html, '<a', '</a>');
-  for (const a of anchors) {
-    const href = extractBetween(a, 'href="', '"') || extractBetween(a, "href='", "'");
-    const text = a.replace(/<[^>]*>/g, '').trim();
-    if (href && !seen.has(href) && isStreamUrl(href + ' ' + text)) { seen.add(href); found.push(href); }
-  }
-  const sources = extractAllBetween(html, '<source', '>');
-  for (const s of sources) {
-    const src = extractBetween(s, 'src="', '"') || extractBetween(s, "src='", "'");
-    if (src && !seen.has(src)) { seen.add(src); found.push(src); }
-  }
-  return found;
-}
-
-function buildSlugs(name: string): string[] {
-  const slugs: string[] = [];
-  const lower = name.toLowerCase().trim();
-  const cleaned = lower.replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, ' ').trim();
-
-  const full = cleaned.replace(/\s+/g, '-');
-  slugs.push(full);
-
-  const vsMatch = cleaned.match(/(.+?)\s*vs\.?\s*(.+)/i);
-  if (vsMatch) {
-    const f1 = vsMatch[1].trim().replace(/\s+/g, '-');
-    const f2 = vsMatch[2].trim().replace(/\s+/g, '-');
-    slugs.push(`${f1}-vs-${f2}`);
-  }
-
-  const noUfc = cleaned.replace(/ufc\s*/i, '').trim().replace(/\s+/g, '-');
-  if (noUfc !== full) slugs.push(noUfc);
-
-  const short = cleaned.split(' ').slice(-3).join('-');
-  if (short !== full) slugs.push(short);
-
-  return [...new Set(slugs)];
-}
-
-async function getCurrentEventInfo(): Promise<{ name: string; date: string } | null> {
-  try {
-    const res = await fetch('https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard', {
-      headers: { 'User-Agent': USER_AGENT },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const event = data?.events?.[0];
-      if (event) {
-        return { name: event.name || event.shortName || '', date: event.date ? event.date.split('T')[0] : '' };
-      }
-    }
-  } catch {}
-  return null;
-}
-
-async function tryUrls(urls: string[], siteBase: string): Promise<string | null> {
-  for (const u of urls) {
-    const full = normalizeUrl(u, siteBase);
+async function tryUrls(list: string[], base: string): Promise<string | null> {
+  for (const u of list) {
+    const full = normalize(u, base);
     if (!full) continue;
-    const html = await fetchPage(full);
+    const html = await fetchFast(full);
     if (!html) continue;
-    const embeds = tryExtractEmbeds(html);
+    const embeds = extractEmbeds(html);
     const stream = embeds.find(e => isStreamUrl(e));
     if (stream) {
-      const resolved = normalizeUrl(stream, full);
+      const resolved = normalize(stream, full);
       if (resolved) return resolved;
     }
   }
   return null;
 }
 
-async function scrapeOne(site: { id: string; name: string; url: string }, eventName?: string): Promise<StreamSource | null> {
-  const baseHost = new URL(site.url).origin;
+function buildSlug(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-');
+}
 
-  if (eventName) {
-    const slugs = buildSlugs(eventName);
-    const guesses: string[] = [];
+function buildFighterSlug(name: string): string | null {
+  const m = name.toLowerCase().match(/(.+?)\s*vs\.?\s*(.+)/i);
+  if (!m) return null;
+  return `${m[1].trim().replace(/\s+/g, '-')}-vs-${m[2].trim().replace(/\s+/g, '-')}`;
+}
 
-    for (const slug of slugs) {
-      guesses.push(`${baseHost}/ufc-${slug}/`);
-      guesses.push(`${baseHost}/ufc/${slug}/`);
-      guesses.push(`${baseHost}/${slug}/`);
-      guesses.push(`${baseHost}/${slug}-live/`);
-      guesses.push(`${baseHost}/live/ufc-${slug}/`);
-      guesses.push(`${baseHost}/stream/ufc-${slug}/`);
-      guesses.push(`${baseHost}/embed/ufc-${slug}/`);
-      guesses.push(`${baseHost}/watch/ufc-${slug}/`);
+export async function getCurrentEvent(): Promise<{ name: string; date: string } | null> {
+  try {
+    const res = await fetch('https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard', {
+      headers: { 'User-Agent': UA },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const ev = data?.events?.[0];
+      if (ev) return { name: ev.name || ev.shortName || '', date: ev.date?.split('T')[0] || '' };
     }
+  } catch {}
+  return null;
+}
 
-    const found = await tryUrls(guesses, site.url);
-    if (found) {
-      const verified = await verifyUrl(found);
-      return { id: site.id, name: site.name, url: found, verified };
+async function tryGuesses(site: { id: string; name: string; url: string }, eventName: string): Promise<StreamSource | null> {
+  const host = new URL(site.url).origin;
+  const slug = buildSlug(eventName);
+  const fSlug = buildFighterSlug(eventName);
+  const slugs = [slug, fSlug].filter(Boolean) as string[];
+
+  for (const s of slugs) {
+    const patterns = [
+      `${host}/ufc-${s}/`,
+      `${host}/${s}/`,
+    ];
+    const embed = await tryUrls(patterns, site.url);
+    if (embed) {
+      const verified = await headFast(embed);
+      return { id: site.id, name: site.name, url: embed, verified };
     }
   }
+  return null;
+}
 
-  const html = await fetchPage(site.url);
+async function tryHomepage(site: { id: string; name: string; url: string }): Promise<StreamSource | null> {
+  const html = await fetchFast(site.url);
   if (!html) return null;
 
-  const embeds = tryExtractEmbeds(html);
-  const streamEmbeds = embeds.filter(e => isStreamUrl(e));
-  if (streamEmbeds.length > 0) {
-    const resolved = normalizeUrl(streamEmbeds[0], site.url);
+  const embeds = extractEmbeds(html);
+  const streams = embeds.filter(e => isStreamUrl(e));
+  if (streams.length > 0) {
+    const resolved = normalize(streams[0], site.url);
     if (resolved) {
-      const verified = await verifyUrl(resolved);
+      const verified = await headFast(resolved);
       return { id: site.id, name: site.name, url: resolved, verified };
     }
   }
 
-  const links = extractAllBetween(html, '<a', '</a>');
-  const ufcLinks: string[] = [];
-  const schedLinks: string[] = [];
-
-  for (const link of links) {
-    const href = extractBetween(link, 'href="', '"') || extractBetween(link, "href='", "'");
-    const text = link.replace(/<[^>]*>/g, '').trim();
+  const links: string[] = [];
+  for (const a of extractAll(html, '<a', '</a>')) {
+    const href = between(a, 'href="', '"') || between(a, "href='", "'");
+    const text = a.replace(/<[^>]*>/g, '').trim();
     if (href) {
-      const full = normalizeUrl(href, site.url);
+      const full = normalize(href, site.url);
       if (full && !full.includes('javascript:')) {
-        if (hasUfc(href + ' ' + text)) ufcLinks.push(full);
-        if (['schedule', 'events', 'live', 'today', 'now', 'stream'].some(k => full.toLowerCase().includes(k))) {
-          schedLinks.push(full);
-        }
+        const both = href + ' ' + text;
+        if (both.toLowerCase().includes('ufc') || /\bmma\b/i.test(both)) links.push(full);
+        if (['schedule', 'events', 'live', 'today'].some(k => full.toLowerCase().includes(k))) links.push(full);
       }
     }
   }
 
-  for (const linkUrl of [...ufcLinks, ...schedLinks]) {
-    const page = await fetchPage(linkUrl);
+  for (const url of links) {
+    const page = await fetchFast(url);
     if (!page) continue;
-    const pageEmbeds = tryExtractEmbeds(page);
-    const pageStream = pageEmbeds.find(e => isStreamUrl(e));
-    if (pageStream) {
-      const resolved = normalizeUrl(pageStream, linkUrl);
+    const pageEmbeds = extractEmbeds(page);
+    const stream = pageEmbeds.find(e => isStreamUrl(e));
+    if (stream) {
+      const resolved = normalize(stream, url);
       if (resolved) {
-        const verified = await verifyUrl(resolved);
+        const verified = await headFast(resolved);
         return { id: site.id, name: site.name, url: resolved, verified };
       }
     }
@@ -266,37 +222,42 @@ export async function scrapeAllSites(saveToDb?: (sources: StreamSource[]) => Pro
   logs: string[];
 }> {
   const logs: string[] = [];
-  const log = (m: string) => { console.log('[STREAM-SCRAPER]', m); logs.push(m); };
+  const log = (m: string) => { console.log('[STREAM]', m); logs.push(m); };
 
-  const eventInfo = await getCurrentEventInfo();
-  if (eventInfo) log(`Event: ${eventInfo.name} (${eventInfo.date})`);
+  const eventInfo = await getCurrentEvent();
+  if (eventInfo) log(`Event: ${eventInfo.name}`);
   else log('No event info from ESPN');
 
   log(`Scraping ${SITES.length} sites...`);
 
-  const batchSize = 6;
   const allSources: StreamSource[] = [];
 
-  for (let i = 0; i < SITES.length; i += batchSize) {
-    const batch = SITES.slice(i, i + batchSize);
-    const results = await Promise.allSettled(batch.map(s => scrapeOne(s, eventInfo?.name)));
+  for (let i = 0; i < SITES.length; i += 4) {
+    const batch = SITES.slice(i, i + 4);
+    const results = await Promise.allSettled(
+      batch.map(s =>
+        eventInfo
+          ? tryGuesses(s, eventInfo.name).then(r => r || tryHomepage(s))
+          : tryHomepage(s)
+      )
+    );
     for (let j = 0; j < results.length; j++) {
       const r = results[j];
       if (r.status === 'fulfilled' && r.value) {
         const s = { ...r.value, eventName: eventInfo?.name, eventDate: eventInfo?.date };
         allSources.push(s);
-        log(`${batch[j].name}: ${s.url} (${s.verified ? 'verified' : 'unverified'})`);
+        log(`${batch[j].name}: ${s.url} (${s.verified ? 'ok' : '? '})`);
       } else {
-        log(`${batch[j].name}: no embed found`);
+        log(`${batch[j].name}: no embed`);
       }
     }
   }
 
-  log(`Total found: ${allSources.length}/${SITES.length}`);
+  log(`Found: ${allSources.length}/${SITES.length}`);
 
   if (saveToDb && allSources.length > 0) {
-    await saveToDb(allSources.map(s => ({ ...s, eventName: eventInfo?.name, eventDate: eventInfo?.date })));
-    log('Saved to database');
+    await saveToDb(allSources);
+    log('Saved to DB');
   }
 
   return { sources: allSources, eventInfo, logs };
