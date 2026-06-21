@@ -7,17 +7,10 @@ export interface StreamSource {
   error?: string;
 }
 
-interface ScrapeTarget {
-  id: string;
-  name: string;
-  homepage: string;
-  depth?: number;
-}
-
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 
-const SCRAPE_TIMEOUT = 14000;
+const SCRAPE_TIMEOUT = 12000;
 const VERIFY_TIMEOUT = 8000;
 
 const DIRECT_SOURCES: StreamSource[] = [
@@ -26,28 +19,10 @@ const DIRECT_SOURCES: StreamSource[] = [
   { id: 'streamscenter', name: 'Streams Center', url: 'https://streams.center/embed/ch48.php', verified: true, type: 'direct' },
 ];
 
-const SCRAPE_TARGETS: ScrapeTarget[] = [
-  { id: 'totalsportek', name: 'TOTALSPORTEK', homepage: 'https://www.totalsportekpro.com/' },
-  { id: 'streameast', name: 'StreamEast', homepage: 'https://www.streameast100.com/' },
-  { id: 'footybite', name: 'Footybite', homepage: 'https://www.footybite.to/' },
-  { id: 'soccerstreams', name: 'Soccer Streams', homepage: 'https://www.soccerstreams-free.com/' },
-  { id: 'nflbite', name: 'NFLBITE', homepage: 'https://www.nflbite.to/' },
-  { id: 'nbabite', name: 'NBABITE', homepage: 'https://reddit.nbabite.to/' },
-  { id: 'sportsurge', name: 'SPORTSURGE', homepage: 'https://sportsurge100.com/' },
-  { id: 'hesgoal', name: 'HESGOAL', homepage: 'https://hesgoalfree.com/' },
-  { id: 'footballstreams', name: 'Football Streams', homepage: 'https://footballstreams.top/' },
-  { id: 'crackstreams', name: 'CrackStreams', homepage: 'https://crackstreams.one/' },
-  { id: 'methstreams', name: 'MethStreams', homepage: 'https://www.methstreams.pro/' },
-  { id: 'f1streams', name: 'F1 Streams', homepage: 'https://www.f1streamsfree.com/' },
-  { id: 'freestreams', name: 'Free Streams', homepage: 'https://freestreams-live.top/' },
-  { id: 'hufoot', name: 'Hoofoot', homepage: 'https://hufoot.com/' },
-  { id: 'stream2watch', name: 'Stream2Watch', homepage: 'https://stream2watch.football/' },
-];
-
 let cache: { sources: StreamSource[]; timestamp: number } | null = null;
 const CACHE_TTL = 5 * 60 * 1000;
 
-async function fetchPage(url: string, timeout = SCRAPE_TIMEOUT): Promise<string> {
+async function fetchPage(url: string, timeout = SCRAPE_TIMEOUT): Promise<string | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   try {
@@ -56,8 +31,10 @@ async function fetchPage(url: string, timeout = SCRAPE_TIMEOUT): Promise<string>
       signal: controller.signal,
       redirect: 'follow',
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) return null;
     return await res.text();
+  } catch {
+    return null;
   } finally {
     clearTimeout(timer);
   }
@@ -80,194 +57,101 @@ async function verifyUrl(url: string): Promise<boolean> {
   }
 }
 
-function normalizeUrl(href: string, base: string): string {
-  const trimmed = href.trim();
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
-  if (trimmed.startsWith('//')) return 'https:' + trimmed;
+function normalizeUrl(href: string, base: string): string | null {
   try {
-    return new URL(trimmed, base).href;
+    let trimmed = href.trim();
+    if (trimmed.startsWith('//')) trimmed = 'https:' + trimmed;
+    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+      return new URL(trimmed, base).href;
+    }
+    return trimmed;
   } catch {
-    return base;
+    return null;
   }
+}
+
+function extractBetween(text: string, before: string, after: string, startIdx = 0): string | null {
+  const s = text.indexOf(before, startIdx);
+  if (s === -1) return null;
+  const e = text.indexOf(after, s + before.length);
+  if (e === -1) return null;
+  return text.substring(s + before.length, e);
+}
+
+function extractAllBetween(text: string, before: string, after: string): string[] {
+  const results: string[] = [];
+  let idx = 0;
+  while (true) {
+    const s = text.indexOf(before, idx);
+    if (s === -1) break;
+    const e = text.indexOf(after, s + before.length);
+    if (e === -1) break;
+    results.push(text.substring(s + before.length, e));
+    idx = e + after.length;
+  }
+  return results;
 }
 
 function containsUfc(text: string): boolean {
   const lower = text.toLowerCase();
-  if (/\bufc\b/.test(lower)) return true;
-  if (/\b(mma|ultimate?\s*fight(ing)?)\b/.test(lower)) return true;
+  if (lower.includes('ufc')) return true;
+  if (/\b(mma)\b/.test(lower)) return true;
   return false;
 }
 
-function extractEnhancedLinks(html: string): { href: string; text: string }[] {
-  const links: { href: string; text: string }[] = [];
-  const seen = new Set<string>();
-
-  const patterns = [
-    /<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi,
-    /<a[^>]*href='([^']*)'[^>]*>([\s\S]*?)<\/a>/gi,
-    /<a[^>]*href=([^\s>]+)[^>]*>([\s\S]*?)<\/a>/gi,
-  ];
-
-  for (const regex of patterns) {
-    let match;
-    while ((match = regex.exec(html)) !== null) {
-      const href = match[1].trim();
-      const rawText = match[2];
-      const text = rawText
-        .replace(/<[^>]*>/g, '')
-        .replace(/&amp;/g, '&')
-        .replace(/&nbsp;/g, ' ')
-        .replace(/&#(\d+);/g, (_, c) => String.fromCharCode(c))
-        .trim();
-      if (href && text && !seen.has(href)) {
-        seen.add(href);
-        links.push({ href, text });
-      }
-    }
-  }
-
-  return links;
-}
-
-function extractEnhancedIframes(html: string): string[] {
-  const urls: string[] = [];
-  const seen = new Set<string>();
-
-  const patterns = [
-    /<iframe[^>]*src="([^"]*)"[^>]*>/gi,
-    /<iframe[^>]*src='([^']*)'[^>]*>/gi,
-    /<iframe[^>]*src=([^\s>]+)[^>]*>/gi,
-    /<embed[^>]*src="([^"]*)"[^>]*>/gi,
-    /<video[^>]*src="([^"]*)"[^>]*>/gi,
-  ];
-
-  for (const regex of patterns) {
-    let match;
-    while ((match = regex.exec(html)) !== null) {
-      const src = match[1].trim();
-      if (src && !seen.has(src)) {
-        seen.add(src);
-        urls.push(src);
-      }
-    }
-  }
-
-  return urls;
-}
-
-function extractScriptEmbeds(html: string): string[] {
-  const urls: string[] = [];
-  const patterns = [
-    /(?:https?:)?\/\/[^"'\s]*?(?:player|embed|stream|live)[^"'\s]*\.(?:php|html|js)[^"'\s]*/gi,
-    /data-src=["']([^"']*)["']/gi,
-    /data-embed=["']([^"']*)["']/gi,
-  ];
-
-  for (const regex of patterns) {
-    let match;
-    while ((match = regex.exec(html)) !== null) {
-      const url = match[1] || match[0];
-      if (url && url.length > 10 && url.length < 300) {
-        urls.push(url);
-      }
-    }
-  }
-
-  return urls;
-}
-
-function looksLikeStreamUrl(url: string): boolean {
+function isStreamEmbedUrl(url: string): boolean {
   const lower = url.toLowerCase();
   return (
-    /\.(m3u8|mp4|webm|flv|ts)$/i.test(lower) ||
-    /(player|embed|stream|live|watch)/i.test(lower)
+    lower.includes('.m3u8') ||
+    lower.includes('.mp4') ||
+    lower.includes('player') ||
+    lower.includes('embed') ||
+    lower.includes('stream') ||
+    lower.includes('live') ||
+    lower.includes('watch') ||
+    lower.includes('video')
   );
 }
 
-async function scrapeAggregator(target: ScrapeTarget): Promise<StreamSource | null> {
-  try {
-    const html = await fetchPage(target.homepage);
-    const links = extractEnhancedLinks(html);
-    const iframes = extractEnhancedIframes(html);
-    const scripts = extractScriptEmbeds(html);
+async function scrapeAggregator(homepage: string): Promise<string | null> {
+  const html = await fetchPage(homepage);
+  if (!html) return null;
 
-    const ufcLinks = links.filter(l => containsUfc(l.href) || containsUfc(l.text));
-    const streamIframes = iframes.filter(looksLikeStreamUrl);
-    const streamScripts = scripts.filter(looksLikeStreamUrl);
-
-    let embedUrl: string | null = null;
-
-    if (streamIframes.length > 0) {
-      embedUrl = streamIframes[0];
+  const iframes = extractAllBetween(html, '<iframe', '</iframe>');
+  for (const iframe of iframes) {
+    const src = extractBetween(iframe, 'src="', '"') || extractBetween(iframe, "src='", "'");
+    if (src) {
+      const full = normalizeUrl(src, homepage);
+      if (full && isStreamEmbedUrl(full)) return full;
     }
+  }
 
-    if (!embedUrl && ufcLinks.length > 0) {
-      for (const link of ufcLinks) {
-        try {
-          const fullUrl = normalizeUrl(link.href, target.homepage);
-          const pageHtml = await fetchPage(fullUrl);
-          const pageIframes = extractEnhancedIframes(pageHtml);
-          const pageEmbeds = pageIframes.filter(looksLikeStreamUrl);
-          if (pageEmbeds.length > 0) {
-            embedUrl = pageEmbeds[0];
-            break;
-          }
-          if (target.depth && target.depth > 1) {
-            const subLinks = extractEnhancedLinks(pageHtml);
-            const subUfc = subLinks.filter(l => containsUfc(l.href) || containsUfc(l.text));
-            for (const sub of subUfc) {
-              try {
-                const subUrl = normalizeUrl(sub.href, fullUrl);
-                const subHtml = await fetchPage(subUrl);
-                const subIframes = extractEnhancedIframes(subHtml);
-                const subEmbeds = subIframes.filter(looksLikeStreamUrl);
-                if (subEmbeds.length > 0) {
-                  embedUrl = subEmbeds[0];
-                  break;
-                }
-              } catch {}
-            }
-            if (embedUrl) break;
-          }
-        } catch {}
+  const links = extractAllBetween(html, '<a', '</a>');
+  const ufcHrefs: string[] = [];
+
+  for (const link of links) {
+    const href = extractBetween(link, 'href="', '"') || extractBetween(link, "href='", "'");
+    const text = link.replace(/<[^>]*>/g, '').trim();
+    if (href && containsUfc(href + ' ' + text)) {
+      const full = normalizeUrl(href, homepage);
+      if (full) ufcHrefs.push(full);
+    }
+  }
+
+  for (const url of ufcHrefs) {
+    const pageHtml = await fetchPage(url);
+    if (!pageHtml) continue;
+    const pageIframes = extractAllBetween(pageHtml, '<iframe', '</iframe>');
+    for (const iframe of pageIframes) {
+      const src = extractBetween(iframe, 'src="', '"') || extractBetween(iframe, "src='", "'");
+      if (src) {
+        const full = normalizeUrl(src, url);
+        if (full && isStreamEmbedUrl(full)) return full;
       }
     }
-
-    if (!embedUrl && streamScripts.length > 0) {
-      embedUrl = streamScripts[0];
-    }
-
-    if (!embedUrl) {
-      return {
-        id: target.id,
-        name: target.name,
-        url: target.homepage,
-        verified: false,
-        type: 'scraped',
-        error: 'No stream embed found',
-      };
-    }
-
-    embedUrl = embedUrl.startsWith('//') ? 'https:' + embedUrl : embedUrl;
-
-    const verified = await verifyUrl(embedUrl);
-    return {
-      id: target.id,
-      name: target.name,
-      url: embedUrl,
-      verified,
-      type: 'scraped',
-    };
-  } catch (err: any) {
-    return {
-      id: target.id,
-      name: target.name,
-      url: target.homepage,
-      verified: false,
-      type: 'scraped',
-      error: err.message,
-    };
   }
+
+  return null;
 }
 
 export async function discoverSources(force = false): Promise<StreamSource[]> {
@@ -277,8 +161,31 @@ export async function discoverSources(force = false): Promise<StreamSource[]> {
 
   const results: StreamSource[] = [...DIRECT_SOURCES];
 
+  const SITES: { id: string; name: string; url: string }[] = [
+    { id: 'totalsportek', name: 'TOTALSPORTEK', url: 'https://www.totalsportekpro.com/' },
+    { id: 'streameast', name: 'StreamEast', url: 'https://www.streameast100.com/' },
+    { id: 'footybite', name: 'Footybite', url: 'https://www.footybite.to/' },
+    { id: 'nflbite', name: 'NFLBITE', url: 'https://www.nflbite.to/' },
+    { id: 'nbabite', name: 'NBABITE', url: 'https://reddit.nbabite.to/' },
+    { id: 'sportsurge', name: 'Sportsurge', url: 'https://sportsurge100.com/' },
+    { id: 'hesgoal', name: 'Hesgoal', url: 'https://hesgoalfree.com/' },
+    { id: 'footballstreams', name: 'Football Streams', url: 'https://footballstreams.top/' },
+    { id: 'crackstreams', name: 'CrackStreams', url: 'https://crackstreams.one/' },
+    { id: 'methstreams', name: 'MethStreams', url: 'https://www.methstreams.pro/' },
+    { id: 'soccerstreams', name: 'Soccer Streams', url: 'https://www.soccerstreams-free.com/' },
+    { id: 'f1streams', name: 'F1 Streams', url: 'https://www.f1streamsfree.com/' },
+    { id: 'freestreams', name: 'Free Streams', url: 'https://freestreams-live.top/' },
+    { id: 'hufoot', name: 'Hoofoot', url: 'https://hufoot.com/' },
+    { id: 'stream2watch', name: 'Stream2Watch', url: 'https://stream2watch.football/' },
+  ];
+
   const scraped = await Promise.allSettled(
-    SCRAPE_TARGETS.map(t => scrapeAggregator(t)),
+    SITES.map(async (site) => {
+      const embed = await scrapeAggregator(site.url);
+      if (!embed) return null;
+      const verified = await verifyUrl(embed);
+      return { id: site.id, name: site.name, url: embed, verified, type: 'scraped' as const };
+    }),
   );
 
   for (const result of scraped) {
