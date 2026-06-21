@@ -156,6 +156,20 @@ function DashboardTab({ stats, recentUsers, recentMessages }: { stats: Stats; re
     { label: 'Chat Messages', value: stats.messages, icon: 'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z', color: 'from-green-500/20 to-green-600/5 border-green-500/30 text-green-400' },
   ];
 
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefreshUFC = async () => {
+    setRefreshing(true);
+    try {
+      const res = await fetch('/api/admin/refresh-ufc', { method: 'POST' });
+      const data = await res.json();
+      alert(data.message || 'Cache cleared');
+    } catch (err) {
+      alert('Failed to refresh');
+    }
+    setRefreshing(false);
+  };
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -168,6 +182,18 @@ function DashboardTab({ stats, recentUsers, recentMessages }: { stats: Stats; re
             <p className="text-xs opacity-60 uppercase tracking-wider mt-1">{c.label}</p>
           </div>
         ))}
+      </div>
+
+      <div className="bg-gradient-to-b from-[#1a1a1a] to-[#111] border border-gray-800 rounded-2xl p-5 card-hover">
+        <h3 className="text-white text-xs uppercase tracking-wider font-semibold mb-4">UFC Data Cache</h3>
+        <button
+          onClick={handleRefreshUFC}
+          disabled={refreshing}
+          className="bg-blue-600/20 text-blue-400 border border-blue-500/30 px-5 py-2.5 text-xs uppercase font-semibold rounded-xl hover:bg-blue-600/30 transition disabled:opacity-50"
+        >
+          {refreshing ? 'Refreshing...' : 'Refresh UFC Data (Clear Cache)'}
+        </button>
+        <p className="text-gray-500 text-[10px] mt-2">Clears ESPN API cache and forces fresh data on next page load</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
