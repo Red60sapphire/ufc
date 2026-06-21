@@ -3,7 +3,16 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 
-const STREAM_SRC = 'https://soccerball.st/rampages/unoairuf/';
+const SOURCES = [
+  { id: 'soccerball', name: 'Soccer Ball', url: 'https://soccerball.st/rampages/unoairuf/' },
+  { id: 'totalsportek', name: 'TOTALSPORTEK', url: 'https://www.totalsportekpro.com/' },
+  { id: 'streameast', name: 'StreamEast', url: 'https://www.streameast100.com/' },
+  { id: 'footybite', name: 'Footybite', url: 'https://www.footybite.to/' },
+  { id: 'soccerstreams', name: 'Soccer Streams', url: 'https://www.soccerstreams-free.com/' },
+  { id: 'f1streams', name: 'F1 Streams', url: 'https://www.f1streamsfree.com/' },
+  { id: 'nbabite', name: 'NBABITE', url: 'https://reddit.nbabite.to/' },
+];
+
 const CHAT_SRC = 'https://www.youtube.com/live_chat?v=RlrRro00XYY&embed_domain=www.ufc.solutions';
 const LOAD_TIMEOUT = 20000;
 
@@ -11,6 +20,7 @@ export default function WatchPage() {
   const playerRef = useRef<HTMLDivElement>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
+  const [activeSource, setActiveSource] = useState(SOURCES[0]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -23,6 +33,14 @@ export default function WatchPage() {
     window.open = function () { return null; };
     return () => { window.open = originalOpen; };
   }, []);
+
+  const changeSource = useCallback((source: typeof SOURCES[0]) => {
+    if (source.id === activeSource.id && !error) return;
+    setActiveSource(source);
+    setLoading(true);
+    setError(false);
+    setRetry(k => k + 1);
+  }, [activeSource.id, error]);
 
   const reload = useCallback(() => {
     setLoading(true);
@@ -89,9 +107,29 @@ export default function WatchPage() {
         </div>
       </header>
 
+      <div className="flex items-center gap-1.5 px-3 py-2 bg-zinc-900/50 border-b border-zinc-800/40 overflow-x-auto"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+        {SOURCES.map(source => (
+          <button
+            key={source.id}
+            onClick={() => changeSource(source)}
+            className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+              activeSource.id === source.id
+                ? 'bg-red-600 text-white shadow-lg shadow-red-600/20'
+                : 'bg-zinc-800/60 text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-200'
+            }`}
+          >
+            {source.name}
+            {activeSource.id === source.id && (
+              <span className="ml-1.5 inline-block w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+            )}
+          </button>
+        ))}
+      </div>
+
       <div
         className={`flex transition-all duration-500 ease-in-out ${theater ? '' : 'lg:flex-row'}`}
-        style={{ height: 'calc(100dvh - 45px)' }}
+        style={{ height: 'calc(100dvh - 89px)' }}
       >
         <div
           ref={playerRef}
@@ -109,7 +147,9 @@ export default function WatchPage() {
                 </div>
                 <div className="text-center space-y-1">
                   <p className="text-sm text-zinc-300 font-medium">Loading stream</p>
-                  <p className="text-xs text-zinc-600">Establishing secure connection</p>
+                  <p className="text-xs text-zinc-600">
+                    {activeSource.id === 'soccerball' ? 'Establishing secure connection' : `Connecting to ${activeSource.name}`}
+                  </p>
                 </div>
               </div>
             </div>
@@ -126,25 +166,40 @@ export default function WatchPage() {
                 <div>
                   <p className="text-sm text-zinc-300 font-medium mb-1">Stream unavailable</p>
                   <p className="text-xs text-zinc-500 leading-relaxed">
-                    The connection timed out. This could be a network issue or the stream source may be temporarily down.
+                    {activeSource.id === 'soccerball'
+                      ? 'The connection timed out. This could be a network issue or the source may be down.'
+                      : `${activeSource.name} didn't respond. The site may not support embedding. Try another source or open it directly.`}
                   </p>
                 </div>
-                <button
-                  onClick={reload}
-                  className="px-5 py-2 bg-red-600 hover:bg-red-700 active:bg-red-800 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Retry Connection
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={reload}
+                    className="px-5 py-2 bg-red-600 hover:bg-red-700 active:bg-red-800 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Retry
+                  </button>
+                  <a
+                    href={activeSource.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-5 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                    Open Site
+                  </a>
+                </div>
               </div>
             </div>
           )}
 
           <iframe
-            key={retry}
-            src={STREAM_SRC}
+            key={`${activeSource.id}-${retry}`}
+            src={activeSource.url}
             className={`w-full h-full border-0 transition-opacity duration-500 ${loading ? 'opacity-0' : 'opacity-100'}`}
             allowFullScreen
             onLoad={() => { setLoading(false); setError(false); }}
