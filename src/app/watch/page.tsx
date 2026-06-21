@@ -9,7 +9,7 @@ const LOAD_TIMEOUT = 20000;
 
 export default function WatchPage() {
   const playerRef = useRef<HTMLDivElement>(null);
-  const hideTimer = useRef<ReturnType<typeof setTimeout>>();
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
